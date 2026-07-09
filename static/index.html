@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>后门五分钟</title>
+  <style>
+    :root {
+      --bg: #090b10;
+      --bg-elev: rgba(17, 20, 28, 0.72);
+      --bg-panel: rgba(15, 18, 25, 0.88);
+      --line: rgba(255, 255, 255, 0.08);
+      --line-strong: rgba(255, 255, 255, 0.16);
+      --text: #f4f1eb;
+      --muted: #b6b1a7;
+      --muted-2: #8a877f;
+      --accent: #e2c08b;
+      --accent-2: #8fb3ff;
+      --shadow: 0 26px 90px rgba(0, 0, 0, 0.46);
+      --radius-xl: 30px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 14% 10%, rgba(226, 192, 139, 0.14), transparent 24%),
+        radial-gradient(circle at 82% 14%, rgba(143, 179, 255, 0.14), transparent 22%),
+        linear-gradient(180deg, #0f1218 0%, #090b10 100%);
+    }
+    button, input { font: inherit; }
+    button {
+      border: 0;
+      cursor: pointer;
+      color: inherit;
+    }
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      position: relative;
+      overflow: hidden;
+    }
+    .shell::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 52px 52px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.14), rgba(0,0,0,0.58));
+      pointer-events: none;
+    }
+    header, main, footer {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: 24px;
+      position: relative;
+      z-index: 1;
+    }
+    header { padding-top: 34px; }
+    .hero {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: 1fr;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      width: fit-content;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.04);
+      color: var(--accent);
+      font-size: 13px;
+      letter-spacing: 0.02em;
+    }
+    h1 {
+      margin: 14px 0 10px;
+      font-size: clamp(32px, 6vw, 58px);
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+    }
+    .lead {
+      margin: 0;
+      max-width: 720px;
+      color: rgba(243, 240, 234, 0.82);
+      font-size: 18px;
+      line-height: 1.75;
+    }
+    main { padding-top: 12px; }
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .section-title h3 { margin: 0; font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+    .section-title span { color: var(--muted-2); font-size: 13px; }
+    .scenes {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 18px;
+    }
+    .scene {
+      position: relative;
+      overflow: hidden;
+      min-height: 272px;
+      padding: 0;
+      text-align: left;
+      border-radius: var(--radius-xl);
+      background: linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.028));
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease, background .22s ease;
+    }
+    .scene:hover {
+      transform: translateY(-4px);
+      border-color: var(--line-strong);
+      box-shadow: 0 32px 90px rgba(0,0,0,0.5);
+    }
+    .scene:focus-visible, button:focus-visible, input:focus-visible {
+      outline: 2px solid rgba(231, 196, 143, 0.75);
+      outline-offset: 2px;
+    }
+    .thumb {
+      height: 170px;
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .thumb::before, .thumb::after, .poster::before, .poster::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .scene strong, .scene span, .scene .chip { display: block; }
+    .scene .content { padding: 14px 16px 16px; }
+    .scene strong { font-size: 18px; line-height: 1.3; }
+    .scene span { margin-top: 9px; color: var(--muted); font-size: 14px; line-height: 1.65; }
+    .scene .meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 12px;
+      color: var(--accent);
+      font-size: 12px;
+    }
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(231, 196, 143, 0.12);
+      border: 1px solid rgba(231, 196, 143, 0.18);
+    }
+    .room {
+      position: fixed;
+      inset: 0;
+      display: none;
+      background: #090b10;
+      overflow: hidden;
+      z-index: 40;
+    }
+    .room.active { display: block; }
+    /* 进入场景时显式收起首页根视图，从根上避免叠层遮盖，而不是靠覆盖一层在旧页面上 */
+    body.in-room #home { display: none; }
+    .visual {
+      position: absolute;
+      inset: -2%;
+      width: 104%;
+      height: 104%;
+      object-fit: cover;
+      filter: brightness(.74) saturate(1.03);
+    }
+    .poster { background: #12151d; animation: drift 28s ease-in-out infinite alternate; }
+    @keyframes drift {
+      from { transform: scale(1.02) translate3d(-1%, 0, 0); }
+      to { transform: scale(1.08) translate3d(1%, -1%, 0); }
+    }
+    @media (prefers-reduced-motion: reduce) { .poster { animation: none; } }
+    .shade {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(4,5,8,0.4), rgba(4,5,8,0.82));
+    }
+    .panel {
+      position: relative;
+      z-index: 1;
+      width: min(980px, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto auto auto;
+      gap: 16px;
+    }
+    .topbar, .composer-wrap, .branch-shell, .feedback {
+      border: 1px solid var(--line);
+      background: var(--bg-panel);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 12px;
+      border-radius: var(--radius-xl);
+    }
+    .topbar .spacer { flex: 1; }
+    .topbar button, .toolbar-btn, .opt, .action {
+      min-height: 42px;
+      padding: 0 14px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+      color: var(--text);
+      transition: background .18s ease, border-color .18s ease, transform .18s ease;
+    }
+    .topbar button:hover, .toolbar-btn:hover, .opt:hover, .action:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: var(--line-strong);
+      transform: translateY(-1px);
+    }
+    .toolbar-btn.primary {
+      background: linear-gradient(180deg, rgba(231,196,143,0.18), rgba(231,196,143,0.08));
+      border-color: rgba(231,196,143,0.22);
+    }
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 4px;
+    }
+    .control-group label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      min-height: 42px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+    .control-group input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+    .scene-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: center;
+      padding: 0 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .scene-meta strong { color: var(--text); font-size: 16px; }
+    .intro {
+      align-self: center;
+      display: grid;
+      gap: 18px;
+      justify-items: center;
+      text-align: center;
+      padding: 22px 18px 6px;
+    }
+    .intro p {
+      margin: 0;
+      max-width: 640px;
+      font-size: clamp(18px, 2.3vw, 24px);
+      line-height: 1.75;
+      color: rgba(243,240,234,0.94);
+    }
+    .intro-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+    .action {
+      min-width: 148px;
+      padding: 0 16px;
+    }
+    .action.primary {
+      background: linear-gradient(180deg, rgba(231,196,143,0.20), rgba(231,196,143,0.10));
+      border-color: rgba(231,196,143,0.22);
+    }
+    .companion {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      width: min(580px, 100%);
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255,255,255,0.05);
+    }
+    .companion img {
+      width: 72px;
+      height: 72px;
+      object-fit: cover;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: #24211d;
+      flex: 0 0 auto;
+    }
+    .companion strong { font-size: 16px; display: block; }
+    .companion span { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .messages {
+      display: grid;
+      align-content: end;
+      gap: 12px;
+      max-height: 58vh;
+      overflow: auto;
+      padding: 6px 2px 4px;
+    }
+    .msgline { display: flex; align-items: flex-end; gap: 10px; }
+    .msgline.user { justify-content: flex-end; }
+    .msgline img {
+      width: 36px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: #24211d;
+      flex: 0 0 auto;
+    }
+    .msg {
+      width: fit-content;
+      max-width: min(84%, 620px);
+      padding: 13px 15px;
+      border-radius: 18px;
+      line-height: 1.7;
+      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(18, 21, 28, 0.88);
+      color: rgba(243, 240, 234, 0.96);
+    }
+    .msg.user {
+      background: linear-gradient(180deg, rgba(143,179,255,0.20), rgba(143,179,255,0.10));
+      border-color: rgba(143,179,255,0.18);
+    }
+    .composer-wrap {
+      border-radius: 22px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .composer { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+    .composer input {
+      width: 100%;
+      min-height: 48px;
+      padding: 0 16px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+    }
+    .composer input::placeholder { color: #90939e; }
+    .composer button {
+      min-width: 92px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(231,196,143,0.22), rgba(231,196,143,0.1));
+      border: 1px solid rgba(231,196,143,0.22);
+    }
+    .feedback {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      border-radius: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .feedback button, .branch-shell button {
+      min-height: 38px;
+      padding: 0 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+    .branch-shell {
+      border-radius: 22px;
+      padding: 12px;
+      display: grid;
+      gap: 12px;
+    }
+    .branchbar { color: var(--muted); font-size: 13px; }
+    .analysis {
+      margin-top: 8px;
+      padding: 9px 12px;
+      border-left: 2px solid rgba(231,196,143,0.6);
+      background: rgba(255,255,255,0.03);
+      color: #c3b293;
+      font-size: 12.5px;
+      line-height: 1.65;
+      border-radius: 0 12px 12px 0;
+      display: none;
+    }
+    .analysis::before { content: "陪伴手法解析 · "; color: var(--accent); font-weight: 600; }
+    body.show-analysis .analysis { display: block; }
+    .options { display: grid; gap: 10px; }
+    .opt {
+      width: 100%;
+      text-align: left;
+      padding: 12px 14px;
+      line-height: 1.5;
+    }
+    .opt:disabled { opacity: .5; cursor: default; transform: none; }
+    .mode-switch { display: flex; gap: 10px; flex-wrap: wrap; }
+    .mode-switch button { flex: 1 1 220px; }
+    .ending-card {
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.04);
+      text-align: center;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .ending-card .label { color: var(--accent); font-weight: 600; margin-bottom: 8px; }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      z-index: 60;
+      transform: translateX(-50%);
+      padding: 11px 14px;
+      border-radius: 14px;
+      background: rgba(10, 12, 16, 0.85);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.10);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s ease, transform .25s ease;
+      box-shadow: var(--shadow);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(-2px); }
+    footer { color: var(--muted-2); font-size: 13px; }
+    .disclaimer {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px dashed rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      line-height: 1.75;
+      max-width: 760px;
+    }
+    .disclaimer b { color: var(--text); }
+    .hidden { display: none !important; }
+    .v-supermarket_backdoor { background: linear-gradient(150deg, #1c1914, #382d1f 48%, #10100f); }
+    .v-supermarket_backdoor::before { background: radial-gradient(circle at 18% 20%, #ffd47a88 0 5%, transparent 14%), linear-gradient(90deg, transparent 0 70%, #556d5740 70% 82%, transparent 82%); }
+    .v-supermarket_backdoor::after { background: linear-gradient(0deg, #0008 0 22%, transparent 22%), radial-gradient(circle at 80% 72%, #f0c46b77 0 3%, transparent 9%); }
+    .v-convenience_store_night { background: linear-gradient(160deg, #0d1215, #212d35 48%, #0f1010); }
+    .v-convenience_store_night::before { background: linear-gradient(90deg, transparent 0 16%, #dfefff5d 16% 28%, transparent 28% 36%, #dfefff52 36% 49%, transparent 49%), radial-gradient(circle at 55% 22%, #f4fbff90 0 4%, transparent 18%); }
+    .v-convenience_store_night::after { background: linear-gradient(0deg, #070707 0 30%, transparent 30%), radial-gradient(circle at 72% 72%, #d33a2c77 0 2%, transparent 8%); }
+    .v-rain_bus_stop { background: linear-gradient(160deg, #0d1418, #1d2a30 52%, #111); }
+    .v-rain_bus_stop::before { background: repeating-linear-gradient(105deg, #d9f3ff2f 0 1px, transparent 1px 9px), linear-gradient(0deg, #0008 0 25%, transparent 25%); }
+    .v-rain_bus_stop::after { background: radial-gradient(circle at 38% 28%, #f2d47a80 0 4%, transparent 18%), linear-gradient(90deg, transparent 0 18%, #cfd8dd4d 18% 82%, transparent 82%); }
+    .v-car_rain { background: linear-gradient(160deg, #0f1113, #192227 55%, #070707); }
+    .v-car_rain::before { background: radial-gradient(circle at 48% 72%, #7fb6d44d 0 8%, transparent 22%), repeating-linear-gradient(115deg, #d9f3ff2a 0 2px, transparent 2px 14px); }
+    .v-car_rain::after { background: linear-gradient(0deg, #050505 0 30%, transparent 30%), radial-gradient(circle at 24% 76%, #e5734d70 0 3%, transparent 10%); }
+    .v-last_subway { background: linear-gradient(160deg, #121316, #2b3135 50%, #0b0d0f); }
+    .v-last_subway::before { background: linear-gradient(90deg, transparent 0 8%, #c7d3d855 8% 20%, transparent 20% 30%, #c7d3d844 30% 42%, transparent 42%), linear-gradient(0deg, #0008 0 28%, transparent 28%); }
+    .v-last_subway::after { background: radial-gradient(circle at 58% 22%, #fff2bf88 0 4%, transparent 14%); }
+    .v-office_downstairs { background: linear-gradient(160deg, #101111, #1e2629 48%, #0b0b0a); }
+    .v-office_downstairs::before { background: repeating-linear-gradient(90deg, transparent 0 8%, #f1e4b628 8% 10%, transparent 10% 18%), repeating-linear-gradient(0deg, transparent 0 13%, #f1e4b620 13% 15%, transparent 15% 28%); }
+    .v-office_downstairs::after { background: linear-gradient(0deg, #0009 0 28%, transparent 28%), radial-gradient(circle at 76% 72%, #87b9ff5c 0 3%, transparent 10%); }
+    .v-empty_rooftop { background: linear-gradient(160deg, #0b0d12, #1d2530 55%, #090909); }
+    .v-empty_rooftop::before { background: radial-gradient(circle at 80% 18%, #e6444488 0 2%, transparent 7%), linear-gradient(0deg, #050505 0 24%, transparent 24%); }
+    .v-empty_rooftop::after { background: linear-gradient(90deg, transparent 0 8%, #b8c0c733 8% 9%, transparent 9%); }
+    .v-community_bench { background: linear-gradient(160deg, #10140f, #222d22 48%, #0b0b09); }
+    .v-community_bench::before { background: radial-gradient(circle at 25% 22%, #f0d48680 0 5%, transparent 17%), radial-gradient(circle at 66% 44%, #0f0 0 0, transparent 0); }
+    .v-community_bench::after { background: linear-gradient(0deg, #0008 0 24%, transparent 24%), radial-gradient(circle at 70% 28%, #e6d3a03b 0 2%, transparent 10%); }
+    @media (max-width: 820px) {
+      .hero { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      header, main, footer, .panel { padding: 16px; }
+      .scene { min-height: 248px; }
+      .thumb { height: 148px; }
+      .hero-card, .topbar, .composer-wrap, .branch-shell, .feedback { border-radius: 18px; }
+      .composer { grid-template-columns: 1fr; }
+      .control-group { width: 100%; flex-wrap: wrap; }
+      .control-group label { width: 100%; justify-content: space-between; }
+      .topbar { gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell" id="home">
+    <header>
+      <div class="hero">
+        <div>
+          <div class="eyebrow">后门五分钟</div>
+          <h1>今天想在哪儿坐会儿？</h1>
+          <p class="lead">不用马上说清楚，也不用把情绪整理得很漂亮。先挑一个地方，进入一个更安静、更好开口的场景。</p>
+        </div>
+      </div>
+    </header>
+    <main>
+      <div class="section-title">
+        <h3>Scenes</h3>
+        <span>选一个场景，开始停一会儿</span>
+      </div>
+      <div class="scenes" id="scenes"></div>
+    </main>
+    <footer>
+      一期 MVP
+      <div class="disclaimer">
+        <b>声明</b>：本场景与对话纯属虚构，仅用于情绪陪伴体验，请勿代入或对应现实。
+        陪伴者不是心理医生，不做诊断、不开药、不替代专业治疗。如出现自伤自杀念头，请联系身边可信任的人或拨打心理援助热线（如 400-161-9995）。
+      </div>
+    </footer>
+  </div>
+
+  <section class="room" id="room">
+    <div class="visual poster" id="poster"></div>
+    <video class="visual hidden" id="video" playsinline muted loop></video>
+    <div class="shade"></div>
+    <div class="panel">
+      <div class="topbar">
+        <button id="back" class="toolbar-btn">返回</button>
+        <button id="end" class="toolbar-btn">结束</button>
+        <button id="switchScene" class="toolbar-btn">换一个</button>
+        <button id="favorite" class="toolbar-btn primary">收藏</button>
+        <div class="spacer"></div>
+        <div class="control-group">
+          <label>
+            <span>音量</span>
+            <input id="volume" type="range" min="0" max="0.7" step="0.01" value="0.25">
+          </label>
+          <label><input id="mute" type="checkbox"><span>静音</span></label>
+          <label><input id="readAloud" type="checkbox"><span>朗读</span></label>
+          <label title="展开后每句陪伴回复下方显示手法解析"><input id="analysisToggle" type="checkbox"><span>解析</span></label>
+        </div>
+      </div>
+      <div class="scene-meta">
+        <div>
+          <strong id="sceneName">场景</strong>
+          <div id="sceneHint">先坐下，再慢慢说</div>
+        </div>
+        <div id="sceneStatus">自由聊天 / 分支引导</div>
+      </div>
+      <div class="intro" id="intro">
+        <div class="companion hidden" id="companion">
+          <img id="companionAvatar" alt="">
+          <div>
+            <strong id="companionName"></strong>
+            <span id="companionRole"></span>
+          </div>
+        </div>
+        <p id="introText"></p>
+        <div class="intro-actions">
+          <button id="startTalk" class="action primary">我想说两句</button>
+          <button id="startBranch" class="action">不知道说什么</button>
+          <button id="startSilent" class="action">我不想说话</button>
+        </div>
+      </div>
+      <div class="messages hidden" id="messages"></div>
+      <div class="branch-shell hidden" id="options"></div>
+      <div class="composer-wrap hidden" id="composerWrap">
+        <form class="composer" id="form">
+          <input id="input" autocomplete="off" placeholder="想说两句也行">
+          <button>发送</button>
+        </form>
+      </div>
+      <div class="mode-switch hidden" id="modeSwitch">
+        <button id="toBranch">不知道说什么，给我选项</button>
+        <button id="toFree">我想自己说</button>
+      </div>
+      <div class="feedback hidden" id="feedback">
+        <span>这句怎么样？</span>
+        <button data-feedback="like">接住了</button>
+        <button data-feedback="dislike">没接住</button>
+        <button data-feedback="report">举报</button>
+      </div>
+    </div>
+  </section>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let conversationId = null;
+    let currentScene = null;
+    let userId = localStorage.getItem("user_id");
+
+    const scenesEl = document.querySelector("#scenes");
+    const roomEl = document.querySelector("#room");
+    const posterEl = document.querySelector("#poster");
+    const videoEl = document.querySelector("#video");
+    const introEl = document.querySelector("#intro");
+    const introTextEl = document.querySelector("#introText");
+    const sceneNameEl = document.querySelector("#sceneName");
+    const sceneHintEl = document.querySelector("#sceneHint");
+    const sceneStatusEl = document.querySelector("#sceneStatus");
+    const companionEl = document.querySelector("#companion");
+    const companionAvatarEl = document.querySelector("#companionAvatar");
+    const companionNameEl = document.querySelector("#companionName");
+    const companionRoleEl = document.querySelector("#companionRole");
+    const messagesEl = document.querySelector("#messages");
+    const formEl = document.querySelector("#form");
+    const composerWrapEl = document.querySelector("#composerWrap");
+    const feedbackEl = document.querySelector("#feedback");
+    const inputEl = document.querySelector("#input");
+    const volumeEl = document.querySelector("#volume");
+    const muteEl = document.querySelector("#mute");
+    const readAloudEl = document.querySelector("#readAloud");
+    const analysisToggleEl = document.querySelector("#analysisToggle");
+    const optionsEl = document.querySelector("#options");
+    const modeSwitchEl = document.querySelector("#modeSwitch");
+    const toastEl = document.querySelector("#toast");
+    let audioContext = null;
+    let audioEl = null;
+    let noiseGain = null;
+    let noiseSource = null;
+    let branchMode = false;
+    let branchEnded = false;
+
+    volumeEl.value = localStorage.getItem("volume") || volumeEl.value;
+    muteEl.checked = localStorage.getItem("mute") === "true";
+    readAloudEl.checked = localStorage.getItem("read_aloud") === "true";
+    analysisToggleEl.checked = localStorage.getItem("analysis") === "true";
+    if (analysisToggleEl.checked) document.body.classList.add("show-analysis");
+
+    analysisToggleEl.addEventListener("change", () => {
+      localStorage.setItem("analysis", String(analysisToggleEl.checked));
+      document.body.classList.toggle("show-analysis", analysisToggleEl.checked);
+    });
+
+    fetch("/api/scenes").then(r => r.json()).then(scenes => {
+      const favorites = favoriteIds();
+      const recent = localStorage.getItem("recent_scene_id");
+      scenesEl.innerHTML = scenes.map(scene => `
+        <button class="scene" data-id="${scene.scene_id}">
+          <div class="thumb v-${scene.scene_id}" aria-hidden="true"></div>
+          <div class="content">
+            <strong>${scene.display_name}</strong>
+            <span>${scene.description}</span>
+            <div class="meta">
+              <span class="chip">${favorites.includes(scene.scene_id) ? "已收藏" : recent === scene.scene_id ? "最近进入" : "可进入"}</span>
+              <span>进入场景 →</span>
+            </div>
+          </div>
+        </button>
+      `).join("");
+    });
+
+    scenesEl.addEventListener("click", async event => {
+      const button = event.target.closest(".scene");
+      if (!button) return;
+      await enterScene(button.dataset.id);
+    });
+
+    async function enterScene(sceneId) {
+      await ensureUser();
+      const scene = await fetch(`/api/scenes/${sceneId}`).then(r => r.json());
+      const conversation = await fetch("/api/conversations", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({scene_id: scene.scene_id, user_id: userId})
+      }).then(r => r.json());
+      localStorage.setItem("recent_scene_id", scene.scene_id);
+      currentScene = scene;
+      conversationId = conversation.conversation_id;
+      sceneNameEl.textContent = scene.display_name || "场景";
+      sceneHintEl.textContent = scene.description || "先坐下，再慢慢说";
+      sceneStatusEl.textContent = scene.character?.name ? `${scene.character.name} 在场` : "自由聊天 / 分支引导";
+      showVisual(scene);
+      showCompanion(scene);
+      introTextEl.textContent = scene.character?.first_message || conversation.opening_message;
+      messagesEl.innerHTML = "";
+      introEl.classList.remove("hidden");
+      messagesEl.classList.add("hidden");
+      composerWrapEl.classList.add("hidden");
+      optionsEl.classList.add("hidden");
+      modeSwitchEl.classList.add("hidden");
+      feedbackEl.classList.add("hidden");
+      branchMode = false;
+      branchEnded = false;
+      roomEl.classList.add("active");
+      document.body.classList.add("in-room");
+      document.body.style.overflow = "hidden";
+      startNoise();
+    }
+
+    document.querySelector("#back").addEventListener("click", () => {
+      roomEl.classList.remove("active");
+      document.body.classList.remove("in-room");
+      document.body.style.overflow = "";
+      conversationId = null;
+      stopNoise();
+    });
+    document.querySelector("#startTalk").addEventListener("click", enterFreeChat);
+    document.querySelector("#startBranch").addEventListener("click", () => enterBranch());
+    document.querySelector("#toBranch").addEventListener("click", () => { if (!branchEnded) enterBranch(true); });
+    document.querySelector("#toFree").addEventListener("click", () => { if (!branchEnded) enterFreeChat(); });
+
+    function enterFreeChat() {
+      branchMode = false;
+      introEl.classList.add("hidden");
+      messagesEl.classList.remove("hidden");
+      composerWrapEl.classList.remove("hidden");
+      optionsEl.classList.add("hidden");
+      modeSwitchEl.classList.remove("hidden");
+      feedbackEl.classList.remove("hidden");
+      sceneStatusEl.textContent = "自由聊天";
+      if (!messagesEl.children.length) addMessage(introTextEl.textContent);
+      inputEl.focus();
+    }
+
+    async function enterBranch(keepMessages) {
+      if (!conversationId) return;
+      branchMode = true;
+      branchEnded = false;
+      introEl.classList.add("hidden");
+      messagesEl.classList.remove("hidden");
+      composerWrapEl.classList.add("hidden");
+      modeSwitchEl.classList.remove("hidden");
+      feedbackEl.classList.remove("hidden");
+      sceneStatusEl.textContent = "分支引导";
+      if (!keepMessages) messagesEl.innerHTML = "";
+      await advanceBranch();
+    }
+
+    async function advanceBranch(nodeId, userLabel) {
+      if (!conversationId) return;
+      optionsEl.classList.remove("hidden");
+      optionsEl.innerHTML = `<div class="branchbar">正在加载更合适的下一句…</div>`;
+      const res = await fetch("/api/chat/branch", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({conversation_id: conversationId, node_id: nodeId, user_label: userLabel})
+      }).then(r => r.json()).catch(() => null);
+      if (!res || res.detail) {
+        optionsEl.innerHTML = `<div class="branchbar">选项没加载出来，可以直接在下面自己说。</div>`;
+        composerWrapEl.classList.remove("hidden");
+        return;
+      }
+      if (userLabel) addMessage(userLabel, "user");
+      addMessage(res.companion_line, "assistant", res.analysis);
+      renderBranchOptions(res);
+      if (res.should_end) {
+        branchEnded = true;
+        optionsEl.innerHTML = `<div class="ending-card"><div class="label">这一段先到这里</div>如果这种状态还在持续，请尽快联系身边可信任的人，或拨打心理援助热线 400-161-9995 / 120。<br><br><button class="action primary" onclick="document.querySelector('#back').click()">回到场景</button></div>`;
+        stopNoise();
+      }
+    }
+
+    function renderBranchOptions(res) {
+      if (res.is_ending) {
+        const label = {loosened: "好像松了一点", calm: "今晚先到这儿", safety: "注意安全"}[res.ending_type] || "先到这儿";
+        optionsEl.innerHTML = `<div class="ending-card"><div class="label">${label}</div>${res.companion_line}<br><br>
+          <div class="mode-switch" style="justify-content:center">
+            <button id="branchRestart">再来一次</button>
+            <button id="branchToFree">切换到自己说</button>
+            <button onclick="document.querySelector('#back').click()">回到场景</button>
+          </div></div>`;
+        document.querySelector("#branchRestart").addEventListener("click", () => { messagesEl.innerHTML = ""; advanceBranch(); });
+        document.querySelector("#branchToFree").addEventListener("click", enterFreeChat);
+        return;
+      }
+      if (!res.options || !res.options.length) {
+        optionsEl.innerHTML = `<div class="branchbar">没有更多选项了，可以在下面自己接着说。</div>`;
+        composerWrapEl.classList.remove("hidden");
+        return;
+      }
+      optionsEl.innerHTML = `<div class="branchbar">不知道说什么的话，选一个：</div>` +
+        res.options.map(o => `<button class="opt" data-next="${o.next}">${o.label}</button>`).join("");
+    }
+
+    optionsEl.addEventListener("click", event => {
+      const btn = event.target.closest(".opt");
+      if (!btn || btn.disabled) return;
+      btn.disabled = true;
+      optionsEl.querySelectorAll(".opt").forEach(b => b.disabled = true);
+      advanceBranch(btn.dataset.next, btn.textContent);
+    });
+
+    document.querySelector("#startSilent").addEventListener("click", async () => {
+      if (!conversationId) return;
+      const data = await fetch(`/api/conversations/${conversationId}/end`, {method: "POST"}).then(r => r.json());
+      introTextEl.textContent = data.ending_line;
+      conversationId = null;
+      stopNoise();
+    });
+
+    document.querySelector("#end").addEventListener("click", async () => {
+      if (!conversationId) return;
+      const data = await fetch(`/api/conversations/${conversationId}/end`, {method: "POST"}).then(r => r.json());
+      addMessage(data.ending_line);
+      stopNoise();
+      conversationId = null;
+    });
+
+    document.querySelector("#switchScene").addEventListener("click", async () => {
+      const scenes = await fetch("/api/scenes").then(r => r.json());
+      const others = scenes.filter(scene => !currentScene || scene.scene_id !== currentScene.scene_id);
+      if (others.length) await enterScene(others[Math.floor(Math.random() * others.length)].scene_id);
+    });
+
+    document.querySelector("#favorite").addEventListener("click", () => {
+      if (!currentScene) return;
+      const ids = favoriteIds();
+      const next = ids.includes(currentScene.scene_id) ? ids.filter(id => id !== currentScene.scene_id) : [...ids, currentScene.scene_id];
+      localStorage.setItem("favorite_scene_ids", JSON.stringify(next));
+      showToast(next.includes(currentScene.scene_id) ? "已收藏这个场景。" : "已取消收藏。");
+    });
+
+    volumeEl.addEventListener("input", () => { localStorage.setItem("volume", volumeEl.value); setVolume(); });
+    muteEl.addEventListener("change", () => { localStorage.setItem("mute", String(muteEl.checked)); setVolume(); });
+    readAloudEl.addEventListener("change", () => { localStorage.setItem("read_aloud", String(readAloudEl.checked)); if (!readAloudEl.checked) speechSynthesis.cancel(); });
+
+    formEl.addEventListener("submit", async event => {
+      event.preventDefault();
+      const content = inputEl.value.trim();
+      if (!content || !conversationId) return;
+      inputEl.value = "";
+      addMessage(content, "user");
+      const data = await fetch("/api/chat/message", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({conversation_id: conversationId, content})
+      }).then(r => r.json());
+      addMessage(data.reply);
+    });
+
+    feedbackEl.addEventListener("click", async event => {
+      const button = event.target.closest("button[data-feedback]");
+      if (!button) return;
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({conversation_id: conversationId, type: button.dataset.feedback})
+      });
+      button.disabled = true;
+    });
+
+    function addMessage(text, role = "assistant", analysis) {
+      const line = document.createElement("div");
+      line.className = `msgline ${role}`;
+      const div = document.createElement("div");
+      div.className = `msg ${role}`;
+      div.textContent = text;
+      if (role === "assistant") {
+        const avatar = document.createElement("img");
+        avatar.src = currentScene?.character?.avatar_url || currentScene?.poster_url || "";
+        avatar.alt = currentScene?.character?.name || "";
+        line.append(avatar);
+      }
+      line.append(div);
+      if (role === "assistant" && analysis) {
+        const note = document.createElement("div");
+        note.className = "analysis";
+        note.textContent = analysis;
+        line.append(note);
+      }
+      messagesEl.append(line);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      if (role === "assistant") speak(text);
+    }
+
+    function startNoise() {
+      stopNoise();
+      if (currentScene && currentScene.audio_url) {
+        audioEl = new Audio(currentScene.audio_url);
+        audioEl.loop = true;
+        audioEl.volume = currentVolume();
+        audioEl.play().catch(() => { showToast("声音好像没加载出来，但这里还能坐会儿。"); startGeneratedNoise(); });
+        return;
+      }
+      startGeneratedNoise();
+    }
+
+    function startGeneratedNoise() {
+      audioContext = new AudioContext();
+      const bufferSize = audioContext.sampleRate * 2;
+      const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+      const data = buffer.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        last = (last + Math.random() * 2 - 1) / 2;
+        data[i] = last * 0.35;
+      }
+      noiseSource = audioContext.createBufferSource();
+      noiseGain = audioContext.createGain();
+      noiseGain.gain.value = currentVolume();
+      noiseSource.buffer = buffer;
+      noiseSource.loop = true;
+      noiseSource.connect(noiseGain).connect(audioContext.destination);
+      noiseSource.start();
+    }
+
+    function stopNoise() {
+      if (audioEl) audioEl.pause();
+      if (noiseSource) noiseSource.stop();
+      if (audioContext) audioContext.close();
+      audioContext = null;
+      audioEl = null;
+      noiseGain = null;
+      noiseSource = null;
+    }
+
+    function currentVolume() { return muteEl.checked ? 0 : Number(volumeEl.value); }
+    function setVolume() { if (audioEl) audioEl.volume = currentVolume(); if (noiseGain) noiseGain.gain.value = currentVolume(); }
+    function favoriteIds() { return JSON.parse(localStorage.getItem("favorite_scene_ids") || "[]"); }
+
+    async function ensureUser() {
+      if (userId) return userId;
+      const data = await fetch("/api/auth/login").then(r => r.json());
+      userId = data.user_id;
+      localStorage.setItem("user_id", userId);
+      return userId;
+    }
+
+    function showVisual(scene) {
+      posterEl.className = `visual poster v-${scene.scene_id}`;
+      videoEl.classList.add("hidden");
+      videoEl.removeAttribute("src");
+      if (navigator.connection && navigator.connection.saveData) {
+        showToast("省流模式开着，先用静态画面陪你坐会儿。");
+        return;
+      }
+      if (!scene.video_url) return;
+      videoEl.src = scene.video_url;
+      videoEl.poster = scene.poster_url;
+      videoEl.classList.remove("hidden");
+      videoEl.play().catch(() => { videoEl.classList.add("hidden"); showToast("画面先慢一点，声音还在。"); });
+    }
+
+    function showCompanion(scene) {
+      const character = scene.character || {};
+      companionNameEl.textContent = character.name || "坐在旁边的人";
+      companionRoleEl.textContent = character.role || "";
+      companionAvatarEl.src = character.avatar_url || scene.poster_url;
+      companionAvatarEl.alt = character.name || "";
+      companionEl.classList.remove("hidden");
+    }
+
+    function showToast(text) {
+      toastEl.textContent = text;
+      toastEl.classList.add("show");
+      setTimeout(() => toastEl.classList.remove("show"), 2600);
+    }
+
+    function speak(text) {
+      if (!readAloudEl.checked || !("speechSynthesis" in window)) return;
+      speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "zh-CN";
+      utterance.rate = 0.86;
+      utterance.pitch = 0.92;
+      utterance.volume = currentVolume();
+      speechSynthesis.speak(utterance);
+    }
+  </script>
+</body>
+</html>

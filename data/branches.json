@@ -1,0 +1,564 @@
+{
+  "_meta": {
+    "purpose": "预置分支语料：当用户不知道说什么时，给出 2-3 个真实可说的人话选项，每个选项接一句手写的陪伴回复，并附'陪伴手法解析'说明为什么这么接。分支模式不依赖大模型，离线可用，保证每一句都到位。",
+    "inspired_by": "参考 what.arksec.net 聊天模拟器的'选项推进剧情 + 手法解析'形态，把 PUA 操控解析反转为陪伴/倾听手法解析。",
+    "structure": {
+      "start": "起始节点 id",
+      "nodes": {
+        "node_id": {
+          "companion_line": "陪伴者这一句",
+          "analysis": "陪伴手法解析：为什么这么接，对应哪条倾听原则",
+          "options": [{"label": "用户选项", "next": "下一节点 id"}],
+          "is_ending": false,
+          "ending_type": "loosened | calm | safety"
+        }
+      }
+    },
+    "endings": {
+      "loosened": "用户好像松了一点，正向收尾",
+      "calm": "平静中性收尾，不强行升华",
+      "safety": "检测到高风险，退出场景，转介现实帮助"
+    },
+    "note": "选项只学节奏与分寸，不替代自由聊天；用户随时可切回自由输入。"
+  },
+
+  "supermarket_backdoor": {
+    "start": "s1",
+    "nodes": {
+      "s1": {
+        "companion_line": "你也出来躲会儿？行，站这儿吧。",
+        "analysis": "先给位置，再给许可。别急着问原因，先把开口压力降下来。",
+        "options": [
+          {"label": "刚才在里面差点吵起来", "next": "s2"},
+          {"label": "就是想一个人待会儿", "next": "s3"},
+          {"label": "我站这儿会不会碍你事", "next": "s4"}
+        ]
+      },
+      "s2": {
+        "companion_line": "那先别回去。你现在火还没下去，缓一会儿。",
+        "analysis": "先稳住当下，不回现场，不急着分对错。",
+        "options": [
+          {"label": "其实也有我冲的地方", "next": "s5"},
+          {"label": "我现在回去也是甩脸", "next": "s6"}
+        ]
+      },
+      "s3": {
+        "companion_line": "行，不用说话。站这儿就行。",
+        "analysis": "允许沉默，别把不说话当成问题。",
+        "options": [
+          {"label": "（站了一会儿）好像没那么堵了", "next": "s7"},
+          {"label": "我就是觉得喘不上气", "next": "s6"}
+        ]
+      },
+      "s4": {
+        "companion_line": "不碍事。真碍事我早赶你了。",
+        "analysis": "用一点轻调侃把对方的拘谨打散，比空泛安慰更像真人。",
+        "options": [
+          {"label": "那我就再站两分钟", "next": "s7"},
+          {"label": "你经常这么晚出来躲？", "next": "s8"}
+        ]
+      },
+      "s5": {
+        "companion_line": "能想到这步就还好。不是你整个人有问题，是那一会儿火太冲。",
+        "analysis": "把一次失控和整个人切开，别让情绪把自我评价拖下去。",
+        "options": [
+          {"label": "嗯，明天再说吧", "next": "e_loosened"},
+          {"label": "还是怕明天见面尴尬", "next": "s6"}
+        ]
+      },
+      "s6": {
+        "companion_line": "喘不上气就先别硬撑。今天先到这儿，别的事明天再算。",
+        "analysis": "先照顾身体反应，再谈事情。把今晚和明天切开。",
+        "options": [
+          {"label": "好，我先回去", "next": "e_loosened"},
+          {"label": "我不想回那个地方", "next": "e_calm"}
+        ]
+      },
+      "s7": {
+        "companion_line": "那就对了。火是慢慢下去的，不用逼自己一下就好。",
+        "analysis": "不催恢复，承认缓和本来就需要时间。",
+        "is_ending": true,
+        "ending_type": "loosened"
+      },
+      "s8": {
+        "companion_line": "有时候吧。夜班的人多少都得出来透口气。",
+        "analysis": "轻轻接一下自己的存在感，不抢话题。",
+        "is_ending": true,
+        "ending_type": "calm"
+      },
+      "e_loosened": {
+        "companion_line": "今天先到这儿。回去慢点，别再跟自己较劲了。",
+        "analysis": "收尾只给一个具体提醒，不做总结。",
+        "is_ending": true,
+        "ending_type": "loosened"
+      },
+      "e_calm": {
+        "companion_line": "那不回也行，但别一个人杵在这。找个还能待的地方，明天再说。",
+        "analysis": "不替对方做决定，只先保证别独自扛在最差状态里。",
+        "is_ending": true,
+        "ending_type": "calm"
+      }
+    }
+  },
+
+  "convenience_store_night": {
+    "start": "c1",
+    "nodes": {
+      "c1": {
+        "companion_line": "还没回去啊。要坐一下吗？",
+        "analysis": "先给一个不压人的落点，不用直接问原因。",
+        "options": [
+          {"label": "今天特别累", "next": "c2"},
+          {"label": "不想回家", "next": "c3"},
+          {"label": "就随便看看", "next": "c4"}
+        ]
+      },
+      "c2": {
+        "companion_line": "那先别急着走。要不要喝口水？",
+        "analysis": "把情绪落到身体动作上，先缓一口气。",
+        "options": [
+          {"label": "好，谢谢", "next": "c5"},
+          {"label": "累但睡不着", "next": "c6"}
+        ]
+      },
+      "c3": {
+        "companion_line": "嗯。不回也行，先坐会儿。",
+        "analysis": "别追问，先让人有个可以待的地方。",
+        "options": [
+          {"label": "家里有人在等我吵架", "next": "c6"},
+          {"label": "回去也是一个人", "next": "c7"}
+        ]
+      },
+      "c4": {
+        "companion_line": "行，随便看。要水自己拿。",
+        "analysis": "给自由，不把关心做成压力。",
+        "options": [
+          {"label": "（看了一会儿）其实心里有点事", "next": "c6"},
+          {"label": "你这班上到几点", "next": "c5"}
+        ]
+      },
+      "c5": {
+        "companion_line": "嗯，慢慢喝。我在收银这边，有事喊一声。",
+        "analysis": "告诉对方我在，但不盯着。",
+        "options": [
+          {"label": "好，我坐会儿就走", "next": "e_loosened"},
+          {"label": "其实今天被裁了", "next": "c6"}
+        ]
+      },
+      "c6": {
+        "companion_line": "嗯，那种事确实一下子缓不过来。今晚不用想清楚怎么办。",
+        "analysis": "先承认难受，别急着解决。",
+        "options": [
+          {"label": "我就是想找个人说一句", "next": "c7"},
+          {"label": "我怕明天醒过来还是这样", "next": "c8"}
+        ]
+      },
+      "c7": {
+        "companion_line": "那你说，我听着。讲多少都行。",
+        "analysis": "把节奏交给对方，不要求完整。",
+        "options": [
+          {"label": "（说了几句）谢谢你听我说", "next": "e_loosened"},
+          {"label": "说了也没用", "next": "c8"}
+        ]
+      },
+      "c8": {
+        "companion_line": "今晚没用也没关系，先过了今晚。明天醒过来再说。",
+        "analysis": "把目标缩小到今晚能过去就行。",
+        "is_ending": true,
+        "ending_type": "calm"
+      },
+      "e_loosened": {
+        "companion_line": "嗯，坐够了就走。路上慢点，灯亮着呢。",
+        "analysis": "收尾轻一点，落到具体的路上提醒。",
+        "is_ending": true,
+        "ending_type": "loosened"
+      }
+    }
+  },
+
+  "rain_bus_stop": {
+    "start": "r1",
+    "nodes": {
+      "r1": {
+        "companion_line": "车还没来。你先站这儿避一下吧。",
+        "analysis": "给一个不需要解释的停留理由。",
+        "options": [
+          {"label": "我脑子很乱", "next": "r2"},
+          {"label": "我不知道该怎么办", "next": "r3"},
+          {"label": "（不说话，站着）", "next": "r4"}
+        ]
+      },
+      "r2": {
+        "companion_line": "那先乱一会儿。现在不用马上理清。",
+        "analysis": "允许乱，别催整理。",
+        "options": [
+          {"label": "理不清，越想越烦", "next": "r5"},
+          {"label": "就是觉得撑不住", "next": "r3"}
+        ]
+      },
+      "r3": {
+        "companion_line": "先别急着定答案。今晚能过去，就已经算一点了。",
+        "analysis": "把问题先缩小到今晚。",
+        "options": [
+          {"label": "今晚怎么过去啊", "next": "r5"},
+          {"label": "我不想回去面对", "next": "r6"}
+        ]
+      },
+      "r4": {
+        "companion_line": "（也站着，没说话）……雨好像小一点了。",
+        "analysis": "陪沉默，不逼开口。",
+        "options": [
+          {"label": "嗯，小一点了", "next": "e_loosened"},
+          {"label": "其实我刚才在那边站了很久", "next": "r6"}
+        ]
+      },
+      "r5": {
+        "companion_line": "那就先不想。等车来了再决定上不上。",
+        "analysis": "把决定推迟到一个自然节点。",
+        "options": [
+          {"label": "好，等车来再说", "next": "e_loosened"},
+          {"label": "我怕车来了我还是不想上", "next": "r6"}
+        ]
+      },
+      "r6": {
+        "companion_line": "那就不上。今晚不回去也没关系。先别逼自己做决定。",
+        "analysis": "解除必须立刻回去的压力。",
+        "options": [
+          {"label": "谢谢你", "next": "e_loosened"},
+          {"label": "我连站着的力气都没了", "next": "r_safety"}
+        ]
+      },
+      "e_loosened": {
+        "companion_line": "嗯。回去别太急，路滑。今天先这样。",
+        "analysis": "具体提醒比空泛安慰更落地。",
+        "is_ending": true,
+        "ending_type": "loosened"
+      },
+      "r_safety": {
+        "companion_line": "我听见了。你现在别一个人站着。旁边有人吗？或者你打一个电话给能来的人。",
+        "analysis": "出现明显危险信号时，立刻转向现实安全处理。",
+        "is_ending": true,
+        "ending_type": "safety"
+      }
+    }
+  },
+
+  "car_rain": {
+    "start": "a1",
+    "nodes": {
+      "a1": {
+        "companion_line": "先坐着吧。现在不用马上下车。",
+        "analysis": "先解除时间压力，让人能待住。",
+        "options": [
+          {"label": "我不想回家", "next": "a2"},
+          {"label": "我好烦", "next": "a3"},
+          {"label": "就想在这儿坐一会儿", "next": "a4"}
+        ]
+      },
+      "a2": {
+        "companion_line": "那就先不回。你坐着，我不催你。",
+        "analysis": "直接同意，不追问。",
+        "options": [
+          {"label": "回家也是吵", "next": "a5"},
+          {"label": "回去面对一堆烂事", "next": "a3"}
+        ]
+      },
+      "a3": {
+        "companion_line": "嗯，烦就先烦着。别急着把自己劝好。",
+        "analysis": "允许烦，不抢着讲道理。",
+        "options": [
+          {"label": "我烦的是自己", "next": "a6"},
+          {"label": "烦也没人能说", "next": "a5"}
+        ]
+      },
+      "a4": {
+        "companion_line": "嗯。雨打在车窗上，挺安静的。不说话也行。",
+        "analysis": "给沉默一个合理位置。",
+        "options": [
+          {"label": "（坐了一会儿）谢谢你陪我", "next": "e_loosened"},
+          {"label": "其实我怕下车", "next": "a6"}
+        ]
+      },
+      "a5": {
+        "companion_line": "那今晚先别回去面对。在车里多坐会儿，外面的事晚点再说。",
+        "analysis": "把今晚和处理问题分开。",
+        "options": [
+          {"label": "好，再坐一会儿", "next": "e_loosened"},
+          {"label": "可我不能一直躲", "next": "a6"}
+        ]
+      },
+      "a6": {
+        "companion_line": "不能一直躲是真的，但今晚可以。今晚先缓过来，明天的事明天再扛。",
+        "analysis": "承认对方说得对，再把目标拉回今晚。",
+        "options": [
+          {"label": "嗯，今晚先这样", "next": "e_loosened"},
+          {"label": "我怕我撑不到明天", "next": "a_safety"}
+        ]
+      },
+      "e_loosened": {
+        "companion_line": "嗯。等你准备好了再走。",
+        "analysis": "离开的时机交给对方。",
+        "is_ending": true,
+        "ending_type": "loosened"
+      },
+      "a_safety": {
+        "companion_line": "我听见你了。你现在别一个人，给一个能来的人打电话，或者去个有人的地方。",
+        "analysis": "出现撑不住的信号时，直接转现实求助。",
+        "is_ending": true,
+        "ending_type": "safety"
+      }
+    }
+  },
+
+  "last_subway": {
+    "start": "l1",
+    "nodes": {
+      "l1": {
+        "companion_line": "这边没人坐。你坐吧。",
+        "analysis": "先用小善意开口，不碰情绪。",
+        "options": [
+          {"label": "我觉得自己快没电了", "next": "l2"},
+          {"label": "今天什么都没做好", "next": "l3"},
+          {"label": "（坐下，没说话）", "next": "l4"}
+        ]
+      },
+      "l2": {
+        "companion_line": "那就先别撑。今天能到这儿已经够累了。",
+        "analysis": "把状态归因到今天，不把它扩展成整个人。",
+        "options": [
+          {"label": "不是今天，是一直", "next": "l5"},
+          {"label": "嗯，真的好累", "next": "l4"}
+        ]
+      },
+      "l3": {
+        "companion_line": "嗯，今天可能就是不顺。不是你整个人不行。",
+        "analysis": "切开'今天不好'和'我不好'。",
+        "options": [
+          {"label": "可别人都做得挺好", "next": "l5"},
+          {"label": "希望明天能好点", "next": "e_loosened"}
+        ]
+      },
+      "l4": {
+        "companion_line": "（也靠着，闭了下眼）……这班到了我喊你。",
+        "analysis": "给对方一个能放心放空的承诺。",
+        "options": [
+          {"label": "谢谢，我就坐两站", "next": "e_loosened"},
+          {"label": "其实我不知道该在哪站下", "next": "l5"}
+        ]
+      },
+      "l5": {
+        "companion_line": "一直累的话，今晚先别想为什么。先回去睡一觉，脑子空了再回头看。",
+        "analysis": "把反思推迟到有体力的时候。",
+        "options": [
+          {"label": "好，先回去睡", "next": "e_loosened"},
+          {"label": "我睡不着的", "next": "l6"}
+        ]
+      },
+      "l6": {
+        "companion_line": "睡不着也躺着。躺着比坐着扛，身体能回一点是一点。",
+        "analysis": "把'睡不着'降级成'躺着也算休息'。",
+        "is_ending": true,
+        "ending_type": "calm"
+      },
+      "e_loosened": {
+        "companion_line": "嗯。到站了。今晚先少想一点，路上慢点。",
+        "analysis": "自然节点收尾，不煽情。",
+        "is_ending": true,
+        "ending_type": "loosened"
+      }
+    }
+  },
+
+  "office_downstairs": {
+    "start": "o1",
+    "nodes": {
+      "o1": {
+        "companion_line": "还没走啊？先在这儿缓一下。",
+        "analysis": "像熟人随口接一句，不急着盘问。",
+        "options": [
+          {"label": "我又被领导说了", "next": "o2"},
+          {"label": "我是不是不适合这份工作", "next": "o3"},
+          {"label": "就是不想回家", "next": "o4"}
+        ]
+      },
+      "o2": {
+        "companion_line": "烦是正常的。先别急着替他说服自己。",
+        "analysis": "先拦住内化攻击。",
+        "options": [
+          {"label": "可他说得也不是没道理", "next": "o5"},
+          {"label": "我就是咽不下这口气", "next": "o6"}
+        ]
+      },
+      "o3": {
+        "companion_line": "今晚先别判这么大。被说两句很烦，但不等于你整个人不行。",
+        "analysis": "别让一次批评变成全盘否定。",
+        "options": [
+          {"label": "那什么时候想", "next": "o5"},
+          {"label": "我已经想很久了", "next": "o6"}
+        ]
+      },
+      "o4": {
+        "companion_line": "那就不急着回。喝口热水，楼上的事别带回去。",
+        "analysis": "给一个具体动作，把工作和生活切开。",
+        "options": [
+          {"label": "带不回去也得面对", "next": "o6"},
+          {"label": "嗯，先坐会儿", "next": "e_loosened"}
+        ]
+      },
+      "o5": {
+        "companion_line": "有没有道理明天再想。今晚脑子是被骂糊的，这时候想出来的多半是往自己身上捅。",
+        "analysis": "把反思时机往后挪。",
+        "options": [
+          {"label": "你说得对，明天再说", "next": "e_loosened"},
+          {"label": "可我控制不住想", "next": "o6"}
+        ]
+      },
+      "o6": {
+        "companion_line": "控制不住就先别控制。站这儿骂两句也行，骂完回家睡觉，明天再上班。",
+        "analysis": "允许发泄，但要设止损线。",
+        "options": [
+          {"label": "好，骂完就走", "next": "e_loosened"},
+          {"label": "我不想明天再上班了", "next": "o_safety"}
+        ]
+      },
+      "e_loosened": {
+        "companion_line": "今天先到这儿。回去吃口热乎的。",
+        "analysis": "收尾落到身体需要上。",
+        "is_ending": true,
+        "ending_type": "loosened"
+      },
+      "o_safety": {
+        "companion_line": "我听见了。你现在是太累了，不是非得一个人扛。给家里人或者朋友打个电话，今晚别做大决定。",
+        "analysis": "把倦怠和危机区分开，必要时先联络现实支援。",
+        "is_ending": true,
+        "ending_type": "safety"
+      }
+    }
+  },
+
+  "empty_rooftop": {
+    "start": "f1",
+    "nodes": {
+      "f1": {
+        "companion_line": "先往里站一点。然后慢慢说。",
+        "analysis": "先把人从危险边上拉开，再谈别的。",
+        "options": [
+          {"label": "我只是想一个人待着", "next": "f2"},
+          {"label": "我快撑不住了", "next": "f_safety"},
+          {"label": "（往里走了走）", "next": "f3"}
+        ]
+      },
+      "f2": {
+        "companion_line": "可以。但先往里一点。想安静，不一定要站在最危险的地方。",
+        "analysis": "同意需求，但守住安全底线。",
+        "options": [
+          {"label": "好，我往里点", "next": "f3"},
+          {"label": "我就是想看看下面", "next": "f_safety"}
+        ]
+      },
+      "f3": {
+        "companion_line": "嗯，站这儿挺好。风大，缓口气。想说说，不想说就站会儿。",
+        "analysis": "先安全，再给选择。",
+        "options": [
+          {"label": "其实没什么大事，就是累", "next": "f4"},
+          {"label": "我觉得没人在乎我", "next": "f5"}
+        ]
+      },
+      "f4": {
+        "companion_line": "累成这样上天台也正常。要不咱下去找个能坐的地方？",
+        "analysis": "用现实理由把人往更安全的地方带。",
+        "options": [
+          {"label": "好，下去坐会儿", "next": "e_loosened"},
+          {"label": "我再站一分钟", "next": "f5"}
+        ]
+      },
+      "f5": {
+        "companion_line": "我现在在这儿，算一个。你不用信全世界都在乎你，但至少今晚，有个人在听。",
+        "analysis": "不画大饼，只说此刻为真的存在。",
+        "options": [
+          {"label": "好……谢谢你", "next": "e_loosened"},
+          {"label": "你又不认识我", "next": "f_safety"}
+        ]
+      },
+      "e_loosened": {
+        "companion_line": "走吧，下去。今天先离危险的地方远一点，有什么明天再说。",
+        "analysis": "明确离开危险位，并把后续推到明天。",
+        "is_ending": true,
+        "ending_type": "loosened"
+      },
+      "f_safety": {
+        "companion_line": "你现在先转身往里走，离开边沿。我陪着你。然后给一个能来的人打电话，或者直接打当地紧急电话。",
+        "analysis": "出现高危信号时，直接转现实救援，不再停留在场景里。",
+        "is_ending": true,
+        "ending_type": "safety"
+      }
+    }
+  },
+
+  "community_bench": {
+    "start": "b1",
+    "nodes": {
+      "b1": {
+        "companion_line": "不上楼也行，先坐会儿。",
+        "analysis": "把最后那点回家的压力先放下。",
+        "options": [
+          {"label": "我不想上楼", "next": "b2"},
+          {"label": "我觉得自己挺失败的", "next": "b3"},
+          {"label": "就是累了", "next": "b4"}
+        ]
+      },
+      "b2": {
+        "companion_line": "那就先不上。你坐一会儿，我陪你待着。",
+        "analysis": "先陪着，不追问家里事。",
+        "options": [
+          {"label": "回去要面对一堆事", "next": "b5"},
+          {"label": "一个人住，回去也是空", "next": "b4"}
+        ]
+      },
+      "b3": {
+        "companion_line": "别这么说。你只是今天太累了，不是整个人失败。",
+        "analysis": "把一天和整个人切开。",
+        "options": [
+          {"label": "可我好像一直这样", "next": "b5"},
+          {"label": "希望你说的对", "next": "b4"}
+        ]
+      },
+      "b4": {
+        "companion_line": "累了就歇会儿。这长椅就是给人坐的，不收钱。",
+        "analysis": "用一点家常口气，让停留变得自然。",
+        "options": [
+          {"label": "（坐了一会儿）好多了", "next": "e_loosened"},
+          {"label": "歇着也解决不了问题", "next": "b5"}
+        ]
+      },
+      "b5": {
+        "companion_line": "解决不了今晚先不解决。今晚就当给自己放个假，坐这儿吹吹风。",
+        "analysis": "给休息一个正当名分，别让它像认输。",
+        "options": [
+          {"label": "好，今晚就歇着", "next": "e_loosened"},
+          {"label": "我连放假都觉得没意思", "next": "b6"}
+        ]
+      },
+      "b6": {
+        "companion_line": "没意思就先没意思着。先坐这儿，别的事不想。",
+        "analysis": "允许状态不好，不强行打气。",
+        "options": [
+          {"label": "嗯，坐会儿", "next": "e_loosened"},
+          {"label": "我不想活了", "next": "b_safety"}
+        ]
+      },
+      "e_loosened": {
+        "companion_line": "嗯，坐够了就慢慢上去。今天先这样。",
+        "analysis": "结束轻一点，不做总结。",
+        "is_ending": true,
+        "ending_type": "loosened"
+      },
+      "b_safety": {
+        "companion_line": "我听见你了。这话我很当真。你现在别一个人上楼，旁边有人吗？我帮你打电话，或者我们直接找现实里的帮助。",
+        "analysis": "高危时直接转安全处理，不再维持日常陪伴语气。",
+        "is_ending": true,
+        "ending_type": "safety"
+      }
+    }
+  }
+}

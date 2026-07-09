@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>后门五分钟后台</title>
+  <style>
+    :root {
+      --bg: #090b10;
+      --panel: rgba(17, 20, 28, 0.84);
+      --panel-2: rgba(255, 255, 255, 0.04);
+      --line: rgba(255, 255, 255, 0.08);
+      --text: #f4f1eb;
+      --muted: #aba69c;
+      --accent: #e2c08b;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+      --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 12% 10%, rgba(226, 192, 139, 0.14), transparent 24%),
+        radial-gradient(circle at 84% 10%, rgba(143, 179, 255, 0.12), transparent 22%),
+        linear-gradient(180deg, #0f1218 0%, #090b10 100%);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 54px 54px;
+      pointer-events: none;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.16), rgba(0,0,0,0.5));
+    }
+    main { width: min(1120px, 100%); margin: 0 auto; padding: 24px; display: grid; gap: 18px; position: relative; z-index: 1; }
+    h1, h2 { margin: 0; }
+    h1 { font-size: clamp(30px, 4vw, 44px); letter-spacing: -0.04em; }
+    h2 { font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+    section {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+    }
+    table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.03); border-radius: 14px; overflow: hidden; }
+    th, td { padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left; vertical-align: top; }
+    th { color: var(--accent); font-weight: 600; font-size: 13px; letter-spacing: 0.02em; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    pre {
+      margin: 0;
+      padding: 14px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: auto;
+      color: var(--text);
+    }
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      font: 14px ui-monospace, monospace;
+      outline: none;
+    }
+    textarea:focus { border-color: rgba(226, 192, 139, 0.34); box-shadow: 0 0 0 3px rgba(226, 192, 139, 0.08); }
+    button {
+      width: fit-content;
+      padding: 10px 14px;
+      border: 1px solid rgba(226, 192, 139, 0.20);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(226, 192, 139, 0.16), rgba(226, 192, 139, 0.08));
+      color: var(--text);
+      cursor: pointer;
+    }
+    a { color: var(--accent); }
+    .toplink { color: var(--muted); }
+    .toplink:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>后门五分钟后台</h1>
+    <a class="toplink" href="/">返回用户端</a>
+    <section>
+      <h2>配置</h2>
+      <pre id="config">{}</pre>
+    </section>
+    <section>
+      <h2>统计</h2>
+      <pre id="analytics">{}</pre>
+    </section>
+    <section>
+      <h2>场景</h2>
+      <button data-save="scenes">保存场景 JSON</button>
+      <textarea id="scenesJson"></textarea>
+      <table>
+        <thead><tr><th>名称</th><th>描述</th><th>资源</th></tr></thead>
+        <tbody id="scenes"></tbody>
+      </table>
+    </section>
+    <section>
+      <h2>Prompt</h2>
+      <button data-save="prompts">保存 Prompt JSON</button>
+      <textarea id="promptsJson"></textarea>
+      <pre id="prompts">{}</pre>
+    </section>
+    <section>
+      <h2>安全事件</h2>
+      <a href="/api/admin/export/safety-events.csv">导出 CSV</a>
+      <pre id="safety">[]</pre>
+    </section>
+    <section>
+      <h2>会话摘要</h2>
+      <a href="/api/admin/export/conversations.csv">导出 CSV</a>
+      <pre id="conversations">[]</pre>
+    </section>
+    <section>
+      <h2>反馈</h2>
+      <a href="/api/admin/export/feedback.csv">导出 CSV</a>
+      <pre id="feedback">[]</pre>
+    </section>
+  </main>
+  <script>
+    async function load() {
+      const [config, analytics, scenes, prompts, safety, conversations, feedback] = await Promise.all([
+        fetch("/api/config").then(r => r.json()),
+        fetch("/api/analytics").then(r => r.json()),
+        fetch("/api/admin/scenes").then(r => r.json()),
+        fetch("/api/admin/prompts").then(r => r.json()),
+        fetch("/api/admin/safety-events").then(r => r.json()),
+        fetch("/api/admin/conversations").then(r => r.json()),
+        fetch("/api/admin/feedback").then(r => r.json())
+      ]);
+      document.querySelector("#config").textContent = JSON.stringify(config, null, 2);
+      document.querySelector("#analytics").textContent = JSON.stringify(analytics, null, 2);
+      document.querySelector("#prompts").textContent = JSON.stringify(prompts, null, 2);
+      document.querySelector("#promptsJson").value = JSON.stringify(prompts, null, 2);
+      document.querySelector("#safety").textContent = JSON.stringify(safety, null, 2);
+      document.querySelector("#conversations").textContent = JSON.stringify(conversations, null, 2);
+      document.querySelector("#feedback").textContent = JSON.stringify(feedback, null, 2);
+      document.querySelector("#scenesJson").value = JSON.stringify(scenes, null, 2);
+      document.querySelector("#scenes").innerHTML = scenes.map(scene => `
+        <tr>
+          <td>${scene.display_name}</td>
+          <td>${scene.description}</td>
+          <td>${scene.visual_type}<br>${scene.video_url ? "video" : "poster"} / ${scene.audio_url ? "audio" : "generated noise"}</td>
+        </tr>
+      `).join("");
+    }
+    document.addEventListener("click", async event => {
+      const button = event.target.closest("button[data-save]");
+      if (!button) return;
+      const kind = button.dataset.save;
+      const textarea = document.querySelector(kind === "scenes" ? "#scenesJson" : "#promptsJson");
+      const token = localStorage.getItem("admin_token") || prompt("后台保存口令") || "";
+      if (token) localStorage.setItem("admin_token", token);
+      const response = await fetch(`/api/admin/${kind}`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-Admin-Token": token},
+        body: textarea.value
+      });
+      if (response.status === 401) localStorage.removeItem("admin_token");
+      button.textContent = response.ok ? "已保存" : "保存失败";
+      setTimeout(() => button.textContent = kind === "scenes" ? "保存场景 JSON" : "保存 Prompt JSON", 1600);
+      if (response.ok) load();
+    });
+    load();
+  </script>
+</body>
+</html>

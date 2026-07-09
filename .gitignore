@@ -1,0 +1,29 @@
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+
+# ---- 运行时日志 / 本地状态（含请求路径，勿入库）----
+server.err.log
+server.out.log
+*.log
+
+# ---- 密钥 / 环境变量 ----
+.env
+.env.*
+!.env.example
+
+# ---- 本地数据库（含用户危机文本/反馈等 PII，不入库）----
+data/app.db
+data/*.db
+
+# ---- 抓取原始产物（外部站点原始 JS，非源码，勿入库）----
+data/external/arksec_raw/
+
+# ---- 系统 / 编辑器 ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.venv/
+venv/
