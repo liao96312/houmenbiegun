@@ -1,98 +1,187 @@
-# 后门五分钟 MVP
+# HouMen WuFenZhong (后门五分钟)
 
-一期最小可跑版本：H5 场景页 + FastAPI API + OpenAI 兼容模型接口。
+**Language:** English | [简体中文](README.zh-CN.md)
 
-## 启动
+[![CI](https://github.com/liao96312/houmenbiegun/actions/workflows/ci.yml/badge.svg)](https://github.com/liao96312/houmenbiegun/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-009688?logo=fastapi&logoColor=white)
+![Branch Engine](https://img.shields.io/badge/Branch%20Engine-Offline%20Ready-2ea44f)
+![Safety](https://img.shields.io/badge/Safety-Crisis%20Hotline-red)
+![License](https://img.shields.io/badge/License-MIT-blue)
 
-零依赖启动：
+![HouMen WuFenZhong · Last Subway](assets/characters/aki_subway.png)
+
+A short-term emotional companion web app. It takes the "pick an option to advance the story + technique analysis" shape from PUA manipulation simulators and **flips it**: instead of analyzing manipulation, it analyzes **companion / listening technique**. When you don't know what to say, there are written, grounded lines to lean on; behind every companion reply you can open an analysis of the listening principle it follows.
+
+## Why This Project Exists
+
+Most emotional-support products either lean entirely on a large model (unstable quality, high cost, dead offline) or are just a chat box. **HouMen WuFenZhong** aims for "being heard, not fixed":
+
+- 8 **urban-night scenes**: supermarket back door, late-night convenience store, rainy bus stop, sitting in the car, last subway, downstairs from the office, empty rooftop, community bench. Each scene has someone sitting beside you.
+- **Free chat** (default): OpenAI-compatible model (DeepSeek, etc.), 1–3 grounded sentences, catch feelings before solving.
+- **Branch companion** ("don't know what to say"): an offline branch dialogue tree, no large model required, every line hand-written and on-point.
+- **Companion-technique analysis**: toggle "解析" (analysis) to show, under each reply, the listening principle it follows (catch first, don't solve; separate today from the whole person; allow silence…).
+- **Multiple endings + safety referral**: branches close on emotional trajectory (loosened up / let's stop here tonight / safety referral); on self-harm/suicide signals it drops the scene frame and gives real-world safety advice and hotlines (400‑161‑9995 / 120).
+
+> ⚠️ This project is an emotional companion tool, **not a psychologist** — no diagnosis, no medication, no replacement for professional care. High-risk expressions are immediately routed to real-world safety resources.
+
+## Features
+
+| Module | Capability |
+| --- | --- |
+| Scenes & characters | 8 night scenes + 8 companion characters, JSON-driven, editable from admin |
+| Free chat | OpenAI-compatible `/v1/chat/completions`, DeepSeek preset, 1–3 short replies |
+| Branch companion | Offline branch dialogue tree, no large model, every line guaranteed on-point |
+| Technique analysis | Listening-principle analysis under each reply, toggleable |
+| Safety referral | Risk grading (0–3), self-harm/suicide/harm signals trigger safety reply + hotline |
+| Admin | Edit scene/Prompt JSON, view safety events/feedback/conversations, CSV export |
+| Data & privacy | SQLite local runtime data (generated locally, not committed), anonymous login |
+| TTS | Optional server-side TTS; frontend also has a native browser read-aloud toggle |
+| Deployment | Docker / Docker Compose / nginx, built-in health check |
+
+## Scenes
+
+| Scene | Companion | Poster |
+| --- | --- | --- |
+| Supermarket back door | Miss Tayama | ![](static/posters/supermarket_backdoor.svg) |
+| Late-night convenience store | Clerk Xiao Lin | ![](static/posters/convenience_store_night.svg) |
+| Rainy bus stop | Lin Yu | ![](static/posters/rain_bus_stop.svg) |
+| Sitting in the car | Zhou Cheng | ![](static/posters/car_rain.svg) |
+| Last subway | Aki (last-train passenger) | ![](static/posters/last_subway.svg) |
+| Downstairs from the office | Sister Xu | ![](static/posters/office_downstairs.svg) |
+| Empty rooftop | Sister Lan | ![](static/posters/empty_rooftop.svg) |
+| Community bench | Auntie Chen | ![](static/posters/community_bench.svg) |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Browser["H5 chat page / admin"] --> API["FastAPI API"]
+  API --> Auth["Anonymous login + optional ADMIN_TOKEN"]
+  API --> Free["Free chat"]
+  Free --> LLM["OpenAI-compatible model"]
+  API --> Branch["Branch companion engine"]
+  Branch --> JSON["data/branches.json (offline)"]
+  API --> Safety["Risk grading + safety referral"]
+  Safety --> Hotline["Hotline 400-161-9995 / 120"]
+  API --> Admin["Admin: scenes / prompts / safety events"]
+  Admin --> JSON
+  API --> Store["SQLite runtime data"]
+```
+
+## Core Workflows
+
+### Free chat
+
+1. The user enters a scene and gets the opening line.
+2. Every input is risk-graded first (0–3).
+3. High risk (≥2) takes the safety reply; otherwise the model returns 1–3 grounded sentences.
+4. Highest risk (=3) records a safety event and suggests contacting real-world resources.
+
+### Branch companion ("don't know what to say")
+
+1. The user starts branch mode and gets the start node.
+2. Each step offers 2–3 real, sayable options.
+3. Each choice returns a hand-written companion line + technique analysis + next options.
+4. It closes on an ending node (loosened up / let's stop here tonight / safety referral).
+
+### Safety referral
+
+On detected self-harm, suicide, harm-to-others, or a concrete method, the app drops the scene frame, gives real-world safety advice, and points to a trusted person or emergency services (120).
+
+## Tech Stack
+
+- Backend: FastAPI 0.115.6, uvicorn 0.34.0
+- LLM: OpenAI-compatible API (DeepSeek by default)
+- Frontend: vanilla H5 (`static/index.html` chat page, `static/admin.html` admin), no framework
+- Data: scenes/prompts/branches as JSON; runtime data in SQLite (`data/app.db`, generated locally, not committed)
+- Offline corpus: references the arksec corpus for short-line rhythm only, never copied verbatim
+- Deployment: Docker, Docker Compose, nginx
+
+## Quick Start
+
+Zero-dependency start (Python 3.12):
 
 ```powershell
-$env:AI_API_KEY="你的 key"
+$env:AI_API_KEY="your key"
 $env:AI_BASE_URL="https://api.deepseek.com/v1"
 $env:AI_MODEL="deepseek-chat"
 python -m app.server
 ```
 
-或：
+Or:
 
 ```powershell
 .\scripts\start.ps1
 ```
 
-FastAPI 启动：
+FastAPI dev mode:
 
 ```powershell
 python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload
 ```
 
-打开：http://127.0.0.1:8000
+Open:
 
-后台：http://127.0.0.1:8000/admin
+- Chat page: http://127.0.0.1:8000
+- Admin: http://127.0.0.1:8000/admin
+- Health: http://127.0.0.1:8000/health
+- OpenAPI docs: http://127.0.0.1:8000/docs
 
-健康检查：http://127.0.0.1:8000/health
-
-Docker：
+Docker:
 
 ```powershell
 Copy-Item .env.example .env
 docker compose up --build
 ```
 
-## 可选 TTS
-
-默认关闭：
+Optional TTS (off by default):
 
 ```powershell
 $env:TTS_ENABLED="true"
 ```
 
-当前只返回占位响应，不阻塞一期主流程。
+## Configuration
 
-前端另有浏览器原生朗读开关，不依赖服务端 TTS。
+Copy `.env.example` and fill in local values:
 
-## 配置文件
-
-- 场景：`data/scenes.json`
-- Prompt：`data/prompts.json`
-- 分支语料：`data/branches.json`（预置分支对话树 + 陪伴手法解析，离线可用）
-- 运行数据：`data/app.db`（SQLite，本地生成，不入库）
-
-后台支持直接编辑场景和 Prompt JSON。
-部署到公网前设置 `ADMIN_TOKEN`，后台保存时会要求输入口令。
-
-导出每个场景配置：
-
-```powershell
-python scripts/export_scene_configs.py
+```env
+AI_API_KEY=your OpenAI-compatible key
+AI_BASE_URL=https://api.deepseek.com/v1
+AI_MODEL=deepseek-chat
+TTS_ENABLED=false
+ADMIN_TOKEN=set a strong token before public deployment
 ```
 
-重新生成本地 poster：
+Set `ADMIN_TOKEN` before any public deployment; the admin requires it when saving scenes/prompts.
+
+## Quality Checks
 
 ```powershell
-python scripts/make_posters.py
+python tests_smoke.py
 ```
 
-重写场景角色：
+The smoke test covers scene/character integrity, risk grading, safety replies, the branch engine, and offline-corpus assertions. It **does not depend on a large model or the network**, and runs by default in CI.
 
-```powershell
-python scripts/seed_characters.py
+## Repository Layout
+
+```text
+app/             FastAPI app: routes, companion core, branch engine, persistence
+static/          Vanilla H5: chat index.html, admin.html, character avatars, scene posters
+assets/          Character art and scene source assets
+data/            Scenes / prompts / branches JSON (core content); app.db generated locally, not committed
+docs/            Design notes: branch corpus design, character prompt refs, final writing checklist
+scripts/         Start, corpus import, poster generation, character seeding
+.github/         CI workflows
 ```
 
-## 分支语料与陪伴手法解析（二期新增）
+## Documentation
 
-参考 what.arksec.net 聊天模拟器「选项推进剧情 + 手法解析」的形态，把 PUA 操控解析反转为**陪伴/倾听手法解析**。解决一期完全依赖大模型、质量不稳定的问题。
+- [Branch corpus design](docs/branches_design.md)
+- [Character prompt references](docs/character_prompt_refs.md)
+- [Final writing checklist](docs/final_writing_checklist.md)
 
-- **不知道说什么**模式：用户不想自由输入时，每步给出 2-3 个真实可说的人话选项，每选一项接一句手写的陪伴回复。分支模式不依赖大模型，离线也能跑，保证每一句都到位。
-- **陪伴手法解析**：顶栏「解析」开关打开后，每句陪伴回复下方显示一条解析，点出背后的倾听原则（先接住不解决、把今天和整个人切开、允许沉默……）。对应参考站的「查看 PUA 手法解析」，方向相反。
-- **多结局**：每个场景的分支树有 2-4 个结局（松了一点 / 今晚先到这儿 / 安全转介），按情绪走向收尾。
-- **安全转介**：分支里出现自伤自杀信号时，退出场景感，给现实安全建议与援助热线（400-161-9995 / 120）。
+## Status
 
-自由聊天仍是默认模式，分支只是「不知道说什么」时的引导，两种模式随时可切。
-
-接口：
-
-- `GET /api/branches/{scene_id}` — 取某场景的整棵分支树
-- `POST /api/chat/branch` — `{conversation_id, node_id?, user_label?}`，返回下一节点的 `companion_line / analysis / options / is_ending / ending_type / should_end`
-
-数据结构见 `data/branches.json` 顶部 `_meta`。设计与参考说明见 `docs/branches_design.md`。
+The phase-1 MVP is complete: H5 scene page + FastAPI API + OpenAI-compatible model + offline branch companion engine + safety referral + admin. Phase 2 focuses on making "companion-technique analysis" a teachable, reviewable, structured capability.
