@@ -6,7 +6,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-009688?logo=fastapi&logoColor=white)
 ![Branch Engine](https://img.shields.io/badge/Branch%20Engine-Offline%20Ready-2ea44f)
-![Safety](https://img.shields.io/badge/Safety-Crisis%20Hotline-red)
+![Safety](https://img.shields.io/badge/Safety-Crisis%20Hotline-8b5cf6)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 ![后门五分钟 · 末班地铁](assets/characters/aki_subway.png)
