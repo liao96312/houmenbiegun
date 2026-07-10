@@ -9,9 +9,7 @@
 ![Safety](https://img.shields.io/badge/Safety-Crisis%20Hotline-8b5cf6)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
-![后门五分钟 · 末班地铁](assets/characters/aki_subway.png)
-
-一个短时情绪陪伴 Web 应用。把参考站（PUA 操控模拟器）里的「选项推进剧情 + 手法解析」**反过来**——做成**陪伴 / 倾听手法解析**：当你不知道说什么时，有写好的、能落地的人话可接；每一句陪伴背后，都能点开看它遵循了哪条倾听原则。
+一个短时情绪陪伴 Web 应用。把「选项推进剧情 + 手法解析」的思路**反过来**做——做成**陪伴 / 倾听手法解析**：当你不知道说什么时，有写好的、能落地的人话可接；每一句陪伴背后，都能点开看它遵循了哪条倾听原则。
 
 ## 项目定位
 

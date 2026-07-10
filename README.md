@@ -9,9 +9,7 @@
 ![Safety](https://img.shields.io/badge/Safety-Crisis%20Hotline-8b5cf6)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
-![HouMen WuFenZhong · Last Subway](assets/characters/aki_subway.png)
-
-A short-term emotional companion web app. It takes the "pick an option to advance the story + technique analysis" shape from PUA manipulation simulators and **flips it**: instead of analyzing manipulation, it analyzes **companion / listening technique**. When you don't know what to say, there are written, grounded lines to lean on; behind every companion reply you can open an analysis of the listening principle it follows.
+A short-term emotional companion web app. It flips the "pick an option to advance the story + technique analysis" shape on its head: instead of analyzing manipulation, it analyzes **companion / listening technique**. When you don't know what to say, there are written, grounded lines to lean on; behind every companion reply you can open an analysis of the listening principle it follows.
 
 ## Why This Project Exists
 
