@@ -522,7 +522,7 @@
       一期 MVP
       <div class="disclaimer">
         <b>声明</b>：本场景与对话纯属虚构，仅用于情绪陪伴体验，请勿代入或对应现实。
-        陪伴者不是心理医生，不做诊断、不开药、不替代专业治疗。如出现自伤自杀念头，请联系身边可信任的人或拨打心理援助热线（如 400-161-9995）。
+        陪伴者不是心理医生，不做诊断、不开药、不替代专业治疗。如出现自伤自杀念头，请联系身边可信任的人或拨打心理援助热线 12356；如有立即危险，请拨打 110 或 120。
       </div>
     </footer>
   </div>
@@ -643,20 +643,33 @@
     fetch("/api/scenes").then(r => r.json()).then(scenes => {
       const favorites = favoriteIds();
       const recent = localStorage.getItem("recent_scene_id");
-      scenesEl.innerHTML = scenes.map(scene => `
-        <button class="scene" data-id="${scene.scene_id}">
-          <div class="thumb v-${scene.scene_id}" aria-hidden="true"></div>
-          <div class="content">
-            <strong>${scene.display_name}</strong>
-            <span>${scene.description}</span>
-            <div class="meta">
-              <span class="chip">${favorites.includes(scene.scene_id) ? "已收藏" : recent === scene.scene_id ? "最近进入" : "可进入"}</span>
-              <span>进入场景 →</span>
-            </div>
-          </div>
-        </button>
-      `).join("");
-    });
+      scenesEl.replaceChildren(...scenes.map(scene => {
+        const button = document.createElement("button");
+        button.className = "scene";
+        button.dataset.id = scene.scene_id;
+        const thumb = document.createElement("div");
+        thumb.className = `thumb v-${scene.scene_id}`;
+        thumb.setAttribute("aria-hidden", "true");
+        setPoster(thumb, scene.poster_url);
+        const content = document.createElement("div");
+        content.className = "content";
+        const title = document.createElement("strong");
+        title.textContent = scene.display_name || "未命名场景";
+        const description = document.createElement("span");
+        description.textContent = scene.description || "先停一会儿";
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        chip.textContent = favorites.includes(scene.scene_id) ? "已收藏" : recent === scene.scene_id ? "最近进入" : "可进入";
+        const enterLabel = document.createElement("span");
+        enterLabel.textContent = "进入场景 →";
+        meta.append(chip, enterLabel);
+        content.append(title, description, meta);
+        button.append(thumb, content);
+        return button;
+      }));
+    }).catch(() => showToast("场景暂时没加载出来，等一会儿再试。"));
 
     scenesEl.addEventListener("click", async event => {
       const button = event.target.closest(".scene");
@@ -665,6 +678,7 @@
     });
 
     async function enterScene(sceneId) {
+      stopNoise();
       await ensureUser();
       const scene = await fetch(`/api/scenes/${sceneId}`).then(r => r.json());
       const conversation = await fetch("/api/conversations", {
@@ -693,7 +707,6 @@
       roomEl.classList.add("active");
       document.body.classList.add("in-room");
       document.body.style.overflow = "hidden";
-      startNoise();
     }
 
     document.querySelector("#back").addEventListener("click", () => {
@@ -710,6 +723,7 @@
 
     function enterFreeChat() {
       branchMode = false;
+      startNoise();
       introEl.classList.add("hidden");
       messagesEl.classList.remove("hidden");
       composerWrapEl.classList.remove("hidden");
@@ -724,6 +738,7 @@
     async function enterBranch(keepMessages) {
       if (!conversationId) return;
       branchMode = true;
+      startNoise();
       branchEnded = false;
       introEl.classList.add("hidden");
       messagesEl.classList.remove("hidden");
@@ -754,8 +769,7 @@
       renderBranchOptions(res);
       if (res.should_end) {
         branchEnded = true;
-        optionsEl.innerHTML = `<div class="ending-card"><div class="label">这一段先到这里</div>如果这种状态还在持续，请尽快联系身边可信任的人，或拨打心理援助热线 400-161-9995 / 120。<br><br><button class="action primary" onclick="document.querySelector('#back').click()">回到场景</button></div>`;
-        stopNoise();
+        showSafetyState(res.safety_resources);
       }
     }
 
@@ -821,7 +835,10 @@
 
     volumeEl.addEventListener("input", () => { localStorage.setItem("volume", volumeEl.value); setVolume(); });
     muteEl.addEventListener("change", () => { localStorage.setItem("mute", String(muteEl.checked)); setVolume(); });
-    readAloudEl.addEventListener("change", () => { localStorage.setItem("read_aloud", String(readAloudEl.checked)); if (!readAloudEl.checked) speechSynthesis.cancel(); });
+    readAloudEl.addEventListener("change", () => {
+      localStorage.setItem("read_aloud", String(readAloudEl.checked));
+      if (!readAloudEl.checked && "speechSynthesis" in window) speechSynthesis.cancel();
+    });
 
     formEl.addEventListener("submit", async event => {
       event.preventDefault();
@@ -834,7 +851,8 @@
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({conversation_id: conversationId, content})
       }).then(r => r.json());
-      addMessage(data.reply);
+      if (data.reply) addMessage(data.reply);
+      if (data.should_end || data.risk_level >= 2) showSafetyState(data.safety_resources);
     });
 
     feedbackEl.addEventListener("click", async event => {
@@ -917,6 +935,49 @@
     function setVolume() { if (audioEl) audioEl.volume = currentVolume(); if (noiseGain) noiseGain.gain.value = currentVolume(); }
     function favoriteIds() { return JSON.parse(localStorage.getItem("favorite_scene_ids") || "[]"); }
 
+    function safeStaticUrl(url) {
+      return typeof url === "string" && /^\/static\/[A-Za-z0-9_./-]+$/.test(url) ? url : "";
+    }
+
+    function setPoster(element, url) {
+      const safeUrl = safeStaticUrl(url);
+      element.style.backgroundImage = safeUrl ? `url("${safeUrl}")` : "";
+      element.style.backgroundSize = safeUrl ? "cover" : "";
+      element.style.backgroundPosition = safeUrl ? "center" : "";
+    }
+
+    function showSafetyState(resources) {
+      branchEnded = true;
+      const endedConversationId = conversationId;
+      conversationId = null;
+      sceneStatusEl.textContent = "现实安全优先";
+      stopNoise();
+      if ("speechSynthesis" in window) speechSynthesis.cancel();
+      composerWrapEl.classList.add("hidden");
+      modeSwitchEl.classList.add("hidden");
+      feedbackEl.classList.add("hidden");
+      optionsEl.classList.remove("hidden");
+      optionsEl.replaceChildren();
+      const card = document.createElement("div");
+      card.className = "ending-card";
+      const label = document.createElement("div");
+      label.className = "label";
+      label.textContent = "先停在这里";
+      const message = document.createElement("p");
+      message.textContent = "请先联系身边可信任的人，不要一个人待着。";
+      const contacts = document.createElement("p");
+      contacts.textContent = resources || "中国大陆：心理援助热线 12356；如有立即危险，请拨打 110 或 120。";
+      const back = document.createElement("button");
+      back.className = "action primary";
+      back.textContent = "回到首页";
+      back.addEventListener("click", () => document.querySelector("#back").click());
+      card.append(label, message, contacts, back);
+      optionsEl.append(card);
+      if (endedConversationId) {
+        fetch(`/api/conversations/${endedConversationId}/end`, {method: "POST"}).catch(() => {});
+      }
+    }
+
     async function ensureUser() {
       if (userId) return userId;
       const data = await fetch("/api/auth/login").then(r => r.json());
@@ -927,6 +988,7 @@
 
     function showVisual(scene) {
       posterEl.className = `visual poster v-${scene.scene_id}`;
+      setPoster(posterEl, scene.poster_url);
       videoEl.classList.add("hidden");
       videoEl.removeAttribute("src");
       if (navigator.connection && navigator.connection.saveData) {

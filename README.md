@@ -19,7 +19,7 @@ Most emotional-support products either lean entirely on a large model (unstable 
 - **Free chat** (default): OpenAI-compatible model (DeepSeek, etc.), 1–3 grounded sentences, catch feelings before solving.
 - **Branch companion** ("don't know what to say"): an offline branch dialogue tree, no large model required, every line hand-written and on-point.
 - **Companion-technique analysis**: toggle "解析" (analysis) to show, under each reply, the listening principle it follows (catch first, don't solve; separate today from the whole person; allow silence…).
-- **Multiple endings + safety referral**: branches close on emotional trajectory (loosened up / let's stop here tonight / safety referral); on self-harm/suicide signals it drops the scene frame and gives real-world safety advice and hotlines (400‑161‑9995 / 120).
+- **Multiple endings + safety referral**: branches close on emotional trajectory (loosened up / let's stop here tonight / safety referral); on self-harm/suicide signals it drops the scene frame and gives real-world safety advice and hotlines (China mainland: 12356; immediate danger: 110 / 120).
 
 > ⚠️ This project is an emotional companion tool, **not a psychologist** — no diagnosis, no medication, no replacement for professional care. High-risk expressions are immediately routed to real-world safety resources.
 
@@ -34,7 +34,7 @@ Most emotional-support products either lean entirely on a large model (unstable 
 | Safety referral | Risk grading (0–3), self-harm/suicide/harm signals trigger safety reply + hotline |
 | Admin | Edit scene/Prompt JSON, view safety events/feedback/conversations, CSV export |
 | Data & privacy | SQLite local runtime data (generated locally, not committed), anonymous login |
-| TTS | Optional server-side TTS; frontend also has a native browser read-aloud toggle |
+| TTS | Native browser read-aloud; server-side TTS is reserved and off by default |
 | Deployment | Docker / Docker Compose / nginx, built-in health check |
 
 ## Scenes
@@ -61,7 +61,7 @@ flowchart LR
   API --> Branch["Branch companion engine"]
   Branch --> JSON["data/branches.json (offline)"]
   API --> Safety["Risk grading + safety referral"]
-  Safety --> Hotline["Hotline 400-161-9995 / 120"]
+  Safety --> Hotline["Hotline 12356 / 110 / 120"]
   API --> Admin["Admin: scenes / prompts / safety events"]
   Admin --> JSON
   API --> Store["SQLite runtime data"]
@@ -134,11 +134,7 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-Optional TTS (off by default):
-
-```powershell
-$env:TTS_ENABLED="true"
-```
+Read-aloud is off by default and uses the browser's native speech synthesis. The server-side TTS setting is reserved and is not an MVP acceptance item yet.
 
 ## Configuration
 
@@ -148,7 +144,7 @@ Copy `.env.example` and fill in local values:
 AI_API_KEY=your OpenAI-compatible key
 AI_BASE_URL=https://api.deepseek.com/v1
 AI_MODEL=deepseek-chat
-TTS_ENABLED=false
+TTS_ENABLED=false # reserved server-side TTS switch
 ADMIN_TOKEN=set a strong token before public deployment
 ```
 

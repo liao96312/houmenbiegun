@@ -117,31 +117,60 @@
     </section>
     <section>
       <h2>安全事件</h2>
-      <a href="/api/admin/export/safety-events.csv">导出 CSV</a>
+      <button class="export" data-export="/api/admin/export/safety-events.csv">导出 CSV</button>
       <pre id="safety">[]</pre>
     </section>
     <section>
       <h2>会话摘要</h2>
-      <a href="/api/admin/export/conversations.csv">导出 CSV</a>
+      <button class="export" data-export="/api/admin/export/conversations.csv">导出 CSV</button>
       <pre id="conversations">[]</pre>
     </section>
     <section>
       <h2>反馈</h2>
-      <a href="/api/admin/export/feedback.csv">导出 CSV</a>
+      <button class="export" data-export="/api/admin/export/feedback.csv">导出 CSV</button>
       <pre id="feedback">[]</pre>
     </section>
   </main>
   <script>
+    function adminToken() {
+      let token = sessionStorage.getItem("admin_token") || "";
+      if (!token) {
+        token = prompt("后台访问口令") || "";
+        if (token) sessionStorage.setItem("admin_token", token);
+      }
+      return token;
+    }
+
+    function adminFetch(url, options = {}) {
+      const headers = {...(options.headers || {}), "X-Admin-Token": adminToken()};
+      return fetch(url, {...options, headers});
+    }
+
+    async function adminJson(url) {
+      const response = await adminFetch(url);
+      if (response.status === 401) {
+        sessionStorage.removeItem("admin_token");
+        throw new Error("admin token required");
+      }
+      return response.json();
+    }
+
     async function load() {
-      const [config, analytics, scenes, prompts, safety, conversations, feedback] = await Promise.all([
-        fetch("/api/config").then(r => r.json()),
-        fetch("/api/analytics").then(r => r.json()),
-        fetch("/api/admin/scenes").then(r => r.json()),
-        fetch("/api/admin/prompts").then(r => r.json()),
-        fetch("/api/admin/safety-events").then(r => r.json()),
-        fetch("/api/admin/conversations").then(r => r.json()),
-        fetch("/api/admin/feedback").then(r => r.json())
-      ]);
+      let config, analytics, scenes, prompts, safety, conversations, feedback;
+      try {
+        [config, analytics, scenes, prompts, safety, conversations, feedback] = await Promise.all([
+          fetch("/api/config").then(r => r.json()),
+          fetch("/api/analytics").then(r => r.json()),
+          adminJson("/api/admin/scenes"),
+          adminJson("/api/admin/prompts"),
+          adminJson("/api/admin/safety-events"),
+          adminJson("/api/admin/conversations"),
+          adminJson("/api/admin/feedback")
+        ]);
+      } catch (error) {
+        document.querySelector("#config").textContent = "后台口令不正确或服务不可用";
+        return;
+      }
       document.querySelector("#config").textContent = JSON.stringify(config, null, 2);
       document.querySelector("#analytics").textContent = JSON.stringify(analytics, null, 2);
       document.querySelector("#prompts").textContent = JSON.stringify(prompts, null, 2);
@@ -150,30 +179,44 @@
       document.querySelector("#conversations").textContent = JSON.stringify(conversations, null, 2);
       document.querySelector("#feedback").textContent = JSON.stringify(feedback, null, 2);
       document.querySelector("#scenesJson").value = JSON.stringify(scenes, null, 2);
-      document.querySelector("#scenes").innerHTML = scenes.map(scene => `
-        <tr>
-          <td>${scene.display_name}</td>
-          <td>${scene.description}</td>
-          <td>${scene.visual_type}<br>${scene.video_url ? "video" : "poster"} / ${scene.audio_url ? "audio" : "generated noise"}</td>
-        </tr>
-      `).join("");
+      document.querySelector("#scenes").replaceChildren(...scenes.map(scene => {
+        const row = document.createElement("tr");
+        const name = document.createElement("td");
+        name.textContent = scene.display_name || "未命名场景";
+        const description = document.createElement("td");
+        description.textContent = scene.description || "";
+        const assets = document.createElement("td");
+        assets.textContent = `${scene.visual_type || "unknown"} / ${scene.video_url ? "video" : "poster"} / ${scene.audio_url ? "audio" : "generated noise"}`;
+        row.append(name, description, assets);
+        return row;
+      }));
     }
     document.addEventListener("click", async event => {
       const button = event.target.closest("button[data-save]");
       if (!button) return;
       const kind = button.dataset.save;
       const textarea = document.querySelector(kind === "scenes" ? "#scenesJson" : "#promptsJson");
-      const token = localStorage.getItem("admin_token") || prompt("后台保存口令") || "";
-      if (token) localStorage.setItem("admin_token", token);
-      const response = await fetch(`/api/admin/${kind}`, {
+      const response = await adminFetch(`/api/admin/${kind}`, {
         method: "POST",
-        headers: {"Content-Type": "application/json", "X-Admin-Token": token},
+        headers: {"Content-Type": "application/json"},
         body: textarea.value
       });
-      if (response.status === 401) localStorage.removeItem("admin_token");
+      if (response.status === 401) sessionStorage.removeItem("admin_token");
       button.textContent = response.ok ? "已保存" : "保存失败";
       setTimeout(() => button.textContent = kind === "scenes" ? "保存场景 JSON" : "保存 Prompt JSON", 1600);
       if (response.ok) load();
+    });
+    document.addEventListener("click", async event => {
+      const button = event.target.closest("button[data-export]");
+      if (!button) return;
+      const response = await adminFetch(button.dataset.export);
+      if (!response.ok) return;
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = button.dataset.export.split("/").pop();
+      link.click();
+      URL.revokeObjectURL(url);
     });
     load();
   </script>

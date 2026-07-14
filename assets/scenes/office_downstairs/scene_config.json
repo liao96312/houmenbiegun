@@ -1,7 +1,7 @@
 {
   "scene_id": "office_downstairs",
   "display_name": "公司楼下",
-  "description": "写字楼的灯还没全灭，门口台阶有夜风，保安亭亮着小灯。",
+  "description": "写字楼的灯还没全灭，门口台阶有夜风，保安亭亮着小灯。下班了，但人还没完全松开。",
   "visual_type": "static_image",
   "poster_url": "/static/posters/office_downstairs.svg",
   "video_url": "",

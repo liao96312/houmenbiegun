@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track
+from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track
 
 CONVERSATIONS: dict[str, dict] = {}
 
@@ -123,6 +123,7 @@ def chat_branch(body: BranchIn):
         "is_ending": node["is_ending"],
         "ending_type": node["ending_type"],
         "should_end": node.get("ending_type") == "safety",
+        "safety_resources": safety_resources() if node.get("ending_type") == "safety" else None,
     }
 
 
@@ -137,7 +138,9 @@ def config():
 
 
 @app.get("/api/admin/scenes")
-def admin_scenes():
+def admin_scenes(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return SCENES
 
 
@@ -153,7 +156,9 @@ def update_admin_scenes(body: list[dict], x_admin_token: str | None = Header(def
 
 
 @app.get("/api/admin/prompts")
-def admin_prompts():
+def admin_prompts(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return PROMPTS
 
 
@@ -169,32 +174,44 @@ def update_admin_prompts(body: dict, x_admin_token: str | None = Header(default=
 
 
 @app.get("/api/admin/safety-events")
-def admin_safety_events():
+def admin_safety_events(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return SAFETY_EVENTS
 
 
 @app.get("/api/admin/feedback")
-def admin_feedback():
+def admin_feedback(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return FEEDBACK
 
 
 @app.get("/api/admin/conversations")
-def admin_conversations():
+def admin_conversations(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return CONVERSATION_SUMMARIES
 
 
 @app.get("/api/admin/export/safety-events.csv")
-def export_safety_events():
+def export_safety_events(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return PlainTextResponse(csv_text(SAFETY_EVENTS), media_type="text/csv; charset=utf-8")
 
 
 @app.get("/api/admin/export/feedback.csv")
-def export_feedback():
+def export_feedback(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return PlainTextResponse(csv_text(FEEDBACK), media_type="text/csv; charset=utf-8")
 
 
 @app.get("/api/admin/export/conversations.csv")
-def export_conversations():
+def export_conversations(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return PlainTextResponse(csv_text(CONVERSATION_SUMMARIES), media_type="text/csv; charset=utf-8")
 
 
@@ -244,7 +261,12 @@ def chat(body: ChatIn):
 
     conversation["messages"].append({"role": "user", "content": body.content})
     conversation["messages"].append({"role": "assistant", "content": reply})
-    return {"reply": reply, "risk_level": risk_level, "should_end": risk_level >= 3}
+    return {
+        "reply": reply,
+        "risk_level": risk_level,
+        "should_end": risk_level >= 2,
+        "safety_resources": safety_resources() if risk_level >= 2 else None,
+    }
 
 
 @app.post("/api/conversations/{conversation_id}/end")

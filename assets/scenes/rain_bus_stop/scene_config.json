@@ -1,7 +1,7 @@
 {
   "scene_id": "rain_bus_stop",
   "display_name": "雨夜公交站",
-  "description": "公交站棚下面有雨声，路灯照着地面积水，远处车灯偶尔晃过。",
+  "description": "公交站棚下面有雨声，路灯照着地面积水，远处车灯偶尔晃过。雨会一直下，但你可以先不赶。",
   "visual_type": "static_image",
   "poster_url": "/static/posters/rain_bus_stop.svg",
   "video_url": "",

@@ -1,7 +1,7 @@
 {
   "scene_id": "empty_rooftop",
   "display_name": "没人的天台",
-  "description": "城市远处有红色航空灯，风比楼下大一点，四周很空。",
+  "description": "城市远处有红色航空灯，风比楼下大一点，四周很空。这里不适合逞强，先往里站一点。",
   "visual_type": "static_image",
   "poster_url": "/static/posters/empty_rooftop.svg",
   "video_url": "",

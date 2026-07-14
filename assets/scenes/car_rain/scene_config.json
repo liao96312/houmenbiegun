@@ -1,7 +1,7 @@
 {
   "scene_id": "car_rain",
   "display_name": "车里坐一会儿",
-  "description": "车窗上有雨滴，仪表盘有一点微光，外面的路灯模糊成一片。",
+  "description": "车窗上有雨滴，仪表盘有一点微光，外面的路灯模糊成一片。像把门关上以后，外面先停一停的地方。",
   "visual_type": "static_image",
   "poster_url": "/static/posters/car_rain.svg",
   "video_url": "",

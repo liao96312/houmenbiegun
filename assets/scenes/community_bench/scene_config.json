@@ -1,7 +1,7 @@
 {
   "scene_id": "community_bench",
   "display_name": "小区长椅",
-  "description": "路灯照着树影，楼上有零星灯光，远处有人慢慢走过去。",
+  "description": "路灯照着树影，楼上有零星灯光，远处有人慢慢走过去。晚一点回家也没关系。",
   "visual_type": "static_image",
   "poster_url": "/static/posters/community_bench.svg",
   "video_url": "",

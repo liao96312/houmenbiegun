@@ -1,7 +1,7 @@
 {
   "scene_id": "convenience_store_night",
   "display_name": "深夜便利店",
-  "description": "凌晨的便利店还亮着灯，门口有塑料椅，冰柜有轻微嗡嗡声。",
+  "description": "凌晨的便利店还亮着灯，门口有塑料椅，冰柜有轻微嗡嗡声。像夜里还能借你一口气的地方。",
   "visual_type": "static_image",
   "poster_url": "/static/posters/convenience_store_night.svg",
   "video_url": "",

@@ -25,7 +25,8 @@ DEFAULT_PROMPTS = {
         "不要用括号写动作或旁白，像真人聊天一样直接说话。",
     ],
     "safety_rule": "如果用户表达自伤、自杀、伤害他人或具体方法，立刻退出场景感，给现实安全建议并鼓励联系身边可信任的人或紧急服务。",
-    "safety_reply": "你现在的状态可能很危险。请马上联系身边可信任的人，或拨打当地紧急电话。尽量不要一个人待着。",
+    "safety_reply": "先停一下。你现在可能处在危险里，请马上联系身边可信任的人。",
+    "safety_resources": "中国大陆：心理援助热线 12356；如有立即危险，请拨打 110 或 120。",
     "fallback_suffix": "先不用把事情讲清楚，坐一会儿也行。",
 }
 PROMPTS = DEFAULT_PROMPTS | json.loads((ROOT / "data" / "prompts.json").read_text(encoding="utf-8"))
@@ -157,12 +158,34 @@ def write_json(path: Path, data):
 
 
 def risk_level_for(text: str) -> int:
-    level3 = ["杀人", "伤害别人", "报复", "明确计划", "跳楼", "跳河", "上吊", "割腕", "服毒", "烧炭"]
-    level2 = ["自杀", "轻生", "想死", "不想活", "活不下去", "活着没意思", "死了算了", "自残", "伤害自己"]
-    if any(word in text for word in level3):
+    normalized = re.sub(r"\s+", "", text or "")
+    if not normalized:
+        return 0
+
+    # 先排除明显的引用/否定，避免“电影里有人跳楼”把用户直接推入危机流程。
+    quoted_or_third_party = bool(re.search(r"(?:电影|新闻|小说|游戏|朋友|家人|同事|他说|她说|别人|担心他人)", normalized))
+    negated = bool(re.search(r"(?:没有|没|不是|并不|不是真的).{0,6}(?:想死|自杀|轻生|跳楼|自残|伤害自己)", normalized))
+    if quoted_or_third_party and not re.search(r"我(?:现在|已经|准备|打算|想)", normalized):
+        return 1
+    if negated and not re.search(r"(?:已经|准备|打算|今晚|现在|马上|手里|买了)", normalized):
+        return 0
+
+    level3_patterns = [
+        r"^(?:我|本人)?(?:想|要|准备|打算)(?:跳楼|跳河|上吊|割腕|服毒|杀人|伤害别人)$",
+        r"(?:我|本人)?(?:现在|今晚|今天|马上|准备|打算|已经).{0,20}(?:自杀|跳楼|跳河|上吊|割腕|服毒|吃药|结束一切)",
+        r"(?:我|本人)?(?:已经|准备|买了|拿着).{0,12}(?:药|刀|绳|煤气).{0,12}(?:自杀|结束|死|就做|下手)",
+        r"(?:我想|我要|准备|打算).{0,8}(?:杀人|伤害别人|报复到他受伤)",
+    ]
+    level2_patterns = [
+        r"(?:我|自己).{0,8}(?:自杀|轻生|想死|不想活|活不下去|活着没意思|死了算了|自残|伤害自己|结束一切)",
+        r"(?:想死|不想活|活不下去|活着没意思|死了算了|自残|伤害自己|结束一切)",
+    ]
+    if any(re.search(pattern, normalized) for pattern in level3_patterns):
         return 3
-    if any(word in text for word in level2):
+    if any(re.search(pattern, normalized) for pattern in level2_patterns):
         return 2
+    if re.search(r"(?:消失|撑不住|没用|失败|不想回家|不想面对|没有意义)", normalized):
+        return 1
     return 0
 
 
@@ -182,6 +205,8 @@ def build_system_prompt(scene: dict) -> str:
         "不要写像广告文案、小说旁白、疗愈语录的句子。优先像现实中能说出口的人话。",
         "不要用“你很棒、你很厉害、你值得被爱”这类模板式夸奖；用户否定自己时，用普通事实轻轻纠偏。",
         "不要编陪伴者自己的经历来安慰用户，不说“我当年、我刚来时、我以前也”；优先直接回应用户最后一句。",
+        *[f"开场规则：{rule}" for rule in PROMPTS.get("first_reply_rules", [])],
+        *[f"收尾规则：{rule}" for rule in PROMPTS.get("closing_rules", [])],
         *arksec_prompt_lines(),
         *PROMPTS["style_rules"],
         "下面示例只学习节奏和分寸，不能逐字照抄：",
@@ -207,6 +232,7 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
                 {"role": "user", "content": user_text},
             ],
             "temperature": scene.get("temperature", 0.75),
+            "max_tokens": min(int(scene.get("max_tokens", 180)), 240),
         }
     ).encode("utf-8")
     request = Request(
@@ -219,8 +245,12 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
     try:
         with urlopen(request, timeout=20) as response:
             data = json.loads(response.read().decode("utf-8"))
+        reply = clean_reply(data["choices"][0]["message"]["content"])
+        if not reply or risk_level_for(reply) >= 2:
+            track("ai_fallback")
+            return safety_reply() if risk_level_for(reply) >= 2 else fallback_reply(scene)
         track("ai_success")
-        return clean_reply(data["choices"][0]["message"]["content"])
+        return reply
     except (HTTPError, URLError, KeyError, TimeoutError, json.JSONDecodeError):
         track("ai_fallback")
         return fallback_reply(scene)
@@ -231,11 +261,27 @@ def fallback_reply(scene: dict) -> str:
 
 
 def clean_reply(text: str) -> str:
-    return re.sub(r"^\s*[\(（][^\)）]{1,80}[\)）]\s*", "", text.strip()).strip()
+    cleaned = re.sub(r"^\s*```(?:text|markdown)?\s*|\s*```\s*$", "", str(text or "").strip(), flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"^\s*(?:田山小姐|小林店员|林雨|周澄|阿纪|许姐|岚姐|陈姨|陪伴者|assistant|Assistant)\s*[:：]\s*",
+        "",
+        cleaned,
+    )
+    while re.match(r"^\s*[\(（][^\)）]{1,80}[\)）]\s*", cleaned):
+        cleaned = re.sub(r"^\s*[\(（][^\)）]{1,80}[\)）]\s*", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) > 120:
+        split = max(cleaned.rfind(mark, 0, 120) for mark in "。！？!?；;")
+        cleaned = cleaned[: split + 1 if split >= 40 else 120].rstrip()
+    return cleaned
 
 
 def safety_reply() -> str:
     return PROMPTS["safety_reply"]
+
+
+def safety_resources() -> str:
+    return PROMPTS.get("safety_resources", "中国大陆：心理援助热线 12356；如有立即危险，请拨打 110 或 120。")
 
 
 def config_status() -> dict:
@@ -252,7 +298,7 @@ def config_status() -> dict:
 
 def admin_token_ok(token: str | None) -> bool:
     expected = os.getenv("ADMIN_TOKEN")
-    return not expected or token == expected
+    return bool(expected) and token == expected
 
 
 def csv_text(rows: list[dict]) -> str:
