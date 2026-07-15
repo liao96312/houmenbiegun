@@ -144,6 +144,16 @@ docker compose up --build
 AI_API_KEY=你的 OpenAI 兼容 key
 AI_BASE_URL=https://api.deepseek.com/v1
 AI_MODEL=deepseek-chat
+AI_PROVIDER=nvidia
+AI_FALLBACK_PROVIDER=deepseek
+NVIDIA_API_KEY=你的 NVIDIA API key
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_MODEL=deepseek-ai/deepseek-v4-pro
+NVIDIA_REASONING_EFFORT=none
+DEEPSEEK_API_KEY=你的兼容接口 key
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_DEFAULT_MODEL=deepseek-chat
+DEEPSEEK_THINKING=disabled
 TTS_ENABLED=false # 服务端 TTS 预留，保持关闭
 ADMIN_TOKEN=部署公网前设置一个强口令
 ```

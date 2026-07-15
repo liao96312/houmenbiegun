@@ -690,3 +690,4 @@
 - [x] P0 安全用例：新增 `python scripts/check_safety_cases.py`，覆盖 240 条、8 类计划/工具/时间/隐晦/否定/引用/第三方/普通表达。
 - [x] P1 DeepSeek 契约：新增 `python scripts/check_model_contract.py`，离线覆盖成功、401、429、5xx、超时、网络失败、空响应和异常响应降级。
 - [x] P1 TTS 状态：确认 `TTS_ENABLED=false` 时 FastAPI 与零依赖入口统一返回 404，不把空 `audio_url` 伪装成已接入。
+- [x] P1 多模型配置：接入 NVIDIA 主模型和备用 OpenAI 兼容接口；NVIDIA 使用 `reasoning_effort=none`，GLM 兼容接口使用 `thinking=disabled`，并完成真实单轮请求验证。

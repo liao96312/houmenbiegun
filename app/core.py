@@ -244,17 +244,46 @@ def build_system_prompt(scene: dict, user_text: str = "") -> str:
     ])
 
 
+def model_provider_settings() -> list[dict]:
+    providers = {
+        "nvidia": {
+            "api_key": os.getenv("NVIDIA_API_KEY"),
+            "base_url": os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+            "model": os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-v4-pro"),
+            "request_options": {"reasoning_effort": os.getenv("NVIDIA_REASONING_EFFORT", "none")},
+        },
+        "deepseek": {
+            "api_key": os.getenv("DEEPSEEK_API_KEY"),
+            "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+            "model": os.getenv("DEEPSEEK_DEFAULT_MODEL", "deepseek-chat"),
+            "request_options": {"thinking": {"type": os.getenv("DEEPSEEK_THINKING", "disabled")}},
+        },
+        "legacy": {
+            "api_key": os.getenv("AI_API_KEY"),
+            "base_url": os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1"),
+            "model": os.getenv("AI_MODEL", "deepseek-chat"),
+            "request_options": {},
+        },
+    }
+    requested = os.getenv("AI_PROVIDER", "").strip().lower()
+    fallback = os.getenv("AI_FALLBACK_PROVIDER", "").strip().lower()
+    order = [requested, fallback] if requested else ["nvidia", "deepseek", "legacy"]
+    result = []
+    for provider in order:
+        if provider in providers and providers[provider]["api_key"] and provider not in [item["name"] for item in result]:
+            result.append({"name": provider, **providers[provider]})
+    return result
+
+
 def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
-    api_key = os.getenv("AI_API_KEY")
-    if not api_key:
+    settings_list = model_provider_settings()
+    if not settings_list:
         track("ai_fallback")
         return fallback_reply(scene, user_text)
 
-    base_url = os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
-    model = os.getenv("AI_MODEL", "deepseek-chat")
-    payload = json.dumps(
-        {
-            "model": model,
+    for settings in settings_list:
+        request_body = {
+            "model": settings["model"],
             "messages": [
                 {"role": "system", "content": build_system_prompt(scene, user_text)},
                 *history[-8:],
@@ -262,27 +291,28 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
             ],
             "temperature": scene.get("temperature", 0.75),
             "max_tokens": min(int(scene.get("max_tokens", 180)), 240),
+            **settings.get("request_options", {}),
         }
-    ).encode("utf-8")
-    request = Request(
-        f"{base_url}/chat/completions",
-        data=payload,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urlopen(request, timeout=20) as response:
-            data = json.loads(response.read().decode("utf-8"))
-        reply = clean_reply(data["choices"][0]["message"]["content"])
-        if not reply or risk_level_for(reply) >= 2:
-            track("ai_fallback")
-            return safety_reply() if risk_level_for(reply) >= 2 else fallback_reply(scene, user_text)
-        track("ai_success")
-        return reply
-    except (HTTPError, URLError, KeyError, IndexError, TypeError, TimeoutError, json.JSONDecodeError):
-        track("ai_fallback")
-        return fallback_reply(scene, user_text)
+        payload = json.dumps(request_body).encode("utf-8")
+        request = Request(
+            f"{settings['base_url'].rstrip('/')}/chat/completions",
+            data=payload,
+            headers={"Authorization": f"Bearer {settings['api_key']}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            reply = clean_reply(data["choices"][0]["message"]["content"])
+            if not reply or risk_level_for(reply) >= 2:
+                track("ai_fallback")
+                return safety_reply() if risk_level_for(reply) >= 2 else fallback_reply(scene, user_text)
+            track("ai_success")
+            return reply
+        except (HTTPError, URLError, KeyError, IndexError, TypeError, TimeoutError, json.JSONDecodeError):
+            continue
+    track("ai_fallback")
+    return fallback_reply(scene, user_text)
 
 
 def fallback_reply(scene: dict, user_text: str = "") -> str:
@@ -317,10 +347,18 @@ def safety_resources() -> str:
 
 
 def config_status() -> dict:
+    configured = model_provider_settings()
+    primary = configured[0] if configured else {
+        "name": os.getenv("AI_PROVIDER", "none"),
+        "base_url": os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1"),
+        "model": os.getenv("AI_MODEL", "deepseek-chat"),
+    }
     return {
-        "ai_base_url": os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1"),
-        "ai_model": os.getenv("AI_MODEL", "deepseek-chat"),
-        "ai_configured": bool(os.getenv("AI_API_KEY")),
+        "ai_provider": primary["name"],
+        "ai_base_url": primary["base_url"],
+        "ai_model": primary["model"],
+        "ai_configured": bool(configured),
+        "ai_fallback_provider": configured[1]["name"] if len(configured) > 1 else None,
         "admin_protected": bool(os.getenv("ADMIN_TOKEN")),
         "tts_enabled": os.getenv("TTS_ENABLED", "").lower() == "true",
         "scene_count": len(SCENES),
