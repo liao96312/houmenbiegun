@@ -280,7 +280,7 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
             return safety_reply() if risk_level_for(reply) >= 2 else fallback_reply(scene, user_text)
         track("ai_success")
         return reply
-    except (HTTPError, URLError, KeyError, TimeoutError, json.JSONDecodeError):
+    except (HTTPError, URLError, KeyError, IndexError, TypeError, TimeoutError, json.JSONDecodeError):
         track("ai_fallback")
         return fallback_reply(scene, user_text)
 

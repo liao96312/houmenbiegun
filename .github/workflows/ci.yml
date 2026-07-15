@@ -20,3 +20,7 @@ jobs:
         run: python tests_smoke.py
       - name: Check writing library
         run: python scripts/check_writing.py
+      - name: Check safety cases
+        run: python scripts/check_safety_cases.py
+      - name: Check model contract
+        run: python scripts/check_model_contract.py

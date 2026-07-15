@@ -687,3 +687,6 @@
 - [x] P1 分层文案：新增轻疲惫、委屈、麻木、焦躁、主动求建议 5 层样本；模型只注入当前输入对应的一层。
 - [x] P1 降级回复：无 API 或请求失败时，按输入状态选择短句，不再固定拼接同一条回复。
 - [x] P1 文案检查：新增 `python scripts/check_writing.py`，检查数量、去重、禁用词、场景字段和关键提示词约束。
+- [x] P0 安全用例：新增 `python scripts/check_safety_cases.py`，覆盖 240 条、8 类计划/工具/时间/隐晦/否定/引用/第三方/普通表达。
+- [x] P1 DeepSeek 契约：新增 `python scripts/check_model_contract.py`，离线覆盖成功、401、429、5xx、超时、网络失败、空响应和异常响应降级。
+- [x] P1 TTS 状态：确认 `TTS_ENABLED=false` 时 FastAPI 与零依赖入口统一返回 404，不把空 `audio_url` 伪装成已接入。
