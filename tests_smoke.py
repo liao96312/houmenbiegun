@@ -9,6 +9,7 @@ from app.core import (
     clean_reply,
     config_status,
     csv_text,
+    emotion_layer_for,
     fallback_reply,
     risk_level_for,
     safety_reply,
@@ -60,6 +61,9 @@ def demo():
     assert clean_reply("田山小姐：嗯，先坐会儿。") == "嗯，先坐会儿。"
     assert "高风险" in summarize([{"role": "user", "content": "我想跳楼"}], 3)
     assert "a,b" in csv_text([{"a": 1, "b": 2}])
+    assert emotion_layer_for("我现在很慌，脑子停不下来") == "anxious"
+    assert emotion_layer_for("那我该怎么办") == "advice_requested"
+    assert "当前只参考文案层" in build_system_prompt(scene, "今天被骂得很委屈")
 
 
 if __name__ == "__main__":

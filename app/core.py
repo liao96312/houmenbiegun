@@ -34,6 +34,10 @@ try:
     ARKSEC_STYLE = json.loads((ROOT / "data" / "external" / "arksec_prompt_style.json").read_text(encoding="utf-8"))
 except FileNotFoundError:
     ARKSEC_STYLE = {}
+try:
+    WRITING_LIBRARY = json.loads((ROOT / "data" / "writing_library.json").read_text(encoding="utf-8"))
+except FileNotFoundError:
+    WRITING_LIBRARY = {"opening_lines": [], "layers": {}, "forbidden_patterns": []}
 
 
 def arksec_prompt_lines() -> list[str]:
@@ -42,6 +46,30 @@ def arksec_prompt_lines() -> list[str]:
     if examples:
         lines += ["Arksec 变体只学节奏，不照抄：", *[f"- {line}" for line in examples]]
     return lines
+
+
+def emotion_layer_for(text: str) -> str:
+    normalized = re.sub(r"\s+", "", text or "")
+    if re.search(r"怎么办|怎么做|建议|解决|该不该|要不要", normalized):
+        return "advice_requested"
+    if re.search(r"慌|焦虑|心慌|紧张|害怕|睡不着|停不下来|来不及", normalized):
+        return "anxious"
+    if re.search(r"没感觉|麻木|空|没意思|提不起劲|不知道怎么了", normalized):
+        return "numb"
+    if re.search(r"委屈|难受|被骂|被说|失望|受不了|不公平|吵起来", normalized):
+        return "hurt"
+    return "light_fatigue"
+
+
+def writing_prompt_lines(user_text: str) -> list[str]:
+    layer = emotion_layer_for(user_text)
+    lines = WRITING_LIBRARY.get("layers", {}).get(layer, [])[:5]
+    return [
+        f"当前只参考文案层：{layer}。不要解释这个标签，也不要逐字复制下面句子。",
+        "人工审查样本（只学长度、停顿和分寸）：",
+        *[f"- {line}" for line in lines],
+        "优先保留一处具体回应，最多补一个小方向；用户没问怎么办时不要给建议。",
+    ]
 
 # 持久化层尽力而为：DB 不可写（权限/只读/沙箱）时降级为纯内存，不阻断陪伴主流程。
 # 陪伴对话本身不依赖 DB；DB 只存统计/安全事件/反馈/摘要，掉一晚上不应让产品挂掉。
@@ -189,7 +217,7 @@ def risk_level_for(text: str) -> int:
     return 0
 
 
-def build_system_prompt(scene: dict) -> str:
+def build_system_prompt(scene: dict, user_text: str = "") -> str:
     character = scene.get("character", {})
     return "\n".join([
         PROMPTS["base_system"],
@@ -208,6 +236,7 @@ def build_system_prompt(scene: dict) -> str:
         *[f"开场规则：{rule}" for rule in PROMPTS.get("first_reply_rules", [])],
         *[f"收尾规则：{rule}" for rule in PROMPTS.get("closing_rules", [])],
         *arksec_prompt_lines(),
+        *writing_prompt_lines(user_text),
         *PROMPTS["style_rules"],
         "下面示例只学习节奏和分寸，不能逐字照抄：",
         *[f"- {user} -> {assistant}" for user, assistant in character.get("mes_example", [])],
@@ -219,7 +248,7 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
     api_key = os.getenv("AI_API_KEY")
     if not api_key:
         track("ai_fallback")
-        return fallback_reply(scene)
+        return fallback_reply(scene, user_text)
 
     base_url = os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
     model = os.getenv("AI_MODEL", "deepseek-chat")
@@ -227,7 +256,7 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
         {
             "model": model,
             "messages": [
-                {"role": "system", "content": build_system_prompt(scene)},
+                {"role": "system", "content": build_system_prompt(scene, user_text)},
                 *history[-8:],
                 {"role": "user", "content": user_text},
             ],
@@ -248,16 +277,19 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
         reply = clean_reply(data["choices"][0]["message"]["content"])
         if not reply or risk_level_for(reply) >= 2:
             track("ai_fallback")
-            return safety_reply() if risk_level_for(reply) >= 2 else fallback_reply(scene)
+            return safety_reply() if risk_level_for(reply) >= 2 else fallback_reply(scene, user_text)
         track("ai_success")
         return reply
     except (HTTPError, URLError, KeyError, TimeoutError, json.JSONDecodeError):
         track("ai_fallback")
-        return fallback_reply(scene)
+        return fallback_reply(scene, user_text)
 
 
-def fallback_reply(scene: dict) -> str:
-    return f"{scene['fallback_prefix']}{PROMPTS['fallback_suffix']}"
+def fallback_reply(scene: dict, user_text: str = "") -> str:
+    layer = emotion_layer_for(user_text)
+    candidates = WRITING_LIBRARY.get("layers", {}).get(layer, [])
+    prefix = candidates[0] if candidates else scene["fallback_prefix"]
+    return f"{prefix}{PROMPTS['fallback_suffix']}"
 
 
 def clean_reply(text: str) -> str:
