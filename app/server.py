@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id, summarize, track
+from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, MAX_INPUT_CHARS, RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_MAX_MODEL_CALLS, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, rate_limit_allowed, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id, summarize, track, validate_input_text
 
 
 CONVERSATIONS: dict[str, dict] = {}
@@ -108,7 +108,13 @@ class Handler(BaseHTTPRequestHandler):
             conversation = CONVERSATIONS.get(body.get("conversation_id", ""))
             if not conversation:
                 return self.error(404, "conversation not found")
-            content = body.get("content", "")
+            try:
+                content = validate_input_text(body.get("content", ""), MAX_INPUT_CHARS)
+            except ValueError as exc:
+                return self.error(413, str(exc))
+            subject = conversation.get("user_id") or body.get("conversation_id", "")
+            if not rate_limit_allowed(subject, "messages", RATE_LIMIT_MAX_MESSAGES):
+                return self.error(429, "too many messages")
             risk_level = risk_level_for(content)
             conversation["risk_level"] = max(conversation["risk_level"], risk_level)
             track("messages")
@@ -121,11 +127,9 @@ class Handler(BaseHTTPRequestHandler):
                     "trigger_text": content,
                     "action_taken": "safety_reply" if risk_level >= 2 else "normal_reply",
                 })
-            reply = (
-                safety_reply()
-                if risk_level >= 2
-                else ask_model(conversation["scene"], conversation["messages"], content)
-            )
+            if risk_level < 2 and not rate_limit_allowed(subject, "model", RATE_LIMIT_MAX_MODEL_CALLS):
+                return self.error(429, "model rate limit reached")
+            reply = safety_reply() if risk_level >= 2 else ask_model(conversation["scene"], conversation["messages"], content)
             conversation["messages"].extend([
                 {"role": "user", "content": content},
                 {"role": "assistant", "content": reply},
@@ -141,6 +145,15 @@ class Handler(BaseHTTPRequestHandler):
             conversation = CONVERSATIONS.get(body.get("conversation_id", ""))
             if not conversation:
                 return self.error(404, "conversation not found")
+            user_label = body.get("user_label")
+            if user_label:
+                try:
+                    user_label = validate_input_text(user_label, MAX_INPUT_CHARS)
+                except ValueError as exc:
+                    return self.error(413, str(exc))
+            subject = conversation.get("user_id") or body.get("conversation_id", "")
+            if not rate_limit_allowed(subject, "messages", RATE_LIMIT_MAX_MESSAGES):
+                return self.error(429, "too many messages")
             scene_id = conversation["scene"]["scene_id"]
             node_id = body.get("node_id")
             if node_id:
@@ -165,7 +178,6 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 reply = node["companion_line"]
             # 把分支回复也记进会话历史，方便后续自由聊天接续
-            user_label = body.get("user_label")
             if user_label:
                 conversation["messages"].append({"role": "user", "content": user_label})
             conversation["messages"].append({"role": "assistant", "content": reply})
@@ -222,7 +234,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/tts":
             if os.getenv("TTS_ENABLED", "").lower() != "true":
                 return self.error(404, "tts disabled")
-            return self.json({"audio_url": None, "text": body.get("text", "")})
+            try:
+                text = validate_input_text(body.get("text", ""), MAX_INPUT_CHARS)
+            except ValueError as exc:
+                return self.error(413, str(exc))
+            return self.json({"audio_url": None, "text": text})
 
         if path == "/api/feedback":
             if body.get("type") not in {"like", "dislike", "report"}:

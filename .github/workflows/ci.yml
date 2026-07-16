@@ -26,3 +26,5 @@ jobs:
         run: python scripts/check_model_contract.py
       - name: Check media assets
         run: python scripts/check_media.py
+      - name: Check request limits
+        run: python scripts/check_limits.py

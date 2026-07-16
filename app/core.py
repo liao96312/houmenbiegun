@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
+import time
 from io import StringIO
 from pathlib import Path
 import csv
@@ -13,6 +15,12 @@ from app import store
 
 
 ROOT = Path(__file__).resolve().parent.parent
+MAX_INPUT_CHARS = 1200
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_MAX_MESSAGES = 30
+RATE_LIMIT_MAX_MODEL_CALLS = 20
+_RATE_BUCKETS: dict[tuple[str, str], list[float]] = {}
+_RATE_LOCK = threading.Lock()
 SCENES = json.loads((ROOT / "data" / "scenes.json").read_text(encoding="utf-8"))
 BRANCHES = json.loads((ROOT / "data" / "branches.json").read_text(encoding="utf-8"))
 DEFAULT_PROMPTS = {
@@ -103,6 +111,30 @@ def track(name: str, key: str | None = None, amount: int = 1):
     ANALYTICS["avg_duration_seconds"] = (
         round(ANALYTICS.get("duration_seconds", 0) / ANALYTICS["ended"], 1) if ANALYTICS.get("ended") else 0
     )
+
+
+def validate_input_text(text: str, max_chars: int = MAX_INPUT_CHARS) -> str:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
+    cleaned = text.strip()
+    if not cleaned:
+        raise ValueError("text is required")
+    if len(cleaned) > max_chars:
+        raise ValueError(f"text exceeds {max_chars} characters")
+    return cleaned
+
+
+def rate_limit_allowed(subject: str, bucket: str, limit: int, window: int = RATE_LIMIT_WINDOW_SECONDS) -> bool:
+    now = time.monotonic()
+    key = (subject or "anonymous", bucket)
+    with _RATE_LOCK:
+        recent = [stamp for stamp in _RATE_BUCKETS.get(key, []) if now - stamp < window]
+        if len(recent) >= limit:
+            _RATE_BUCKETS[key] = recent
+            return False
+        recent.append(now)
+        _RATE_BUCKETS[key] = recent
+        return True
 
 
 def record_safety_event(event: dict):

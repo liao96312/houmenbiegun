@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track
+from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, MAX_INPUT_CHARS, RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_MAX_MODEL_CALLS, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, rate_limit_allowed, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track, validate_input_text
 
 CONVERSATIONS: dict[str, dict] = {}
 
@@ -96,6 +96,14 @@ def chat_branch(body: BranchIn):
     conversation = CONVERSATIONS.get(body.conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="conversation not found")
+    if body.user_label:
+        try:
+            body.user_label = validate_input_text(body.user_label, MAX_INPUT_CHARS)
+        except ValueError as exc:
+            raise HTTPException(status_code=413, detail=str(exc))
+    subject = conversation.get("user_id") or body.conversation_id
+    if not rate_limit_allowed(subject, "messages", RATE_LIMIT_MAX_MESSAGES):
+        raise HTTPException(status_code=429, detail="too many messages")
     scene_id = conversation["scene"]["scene_id"]
     node = branch_node(scene_id, body.node_id) if body.node_id else branch_start(scene_id)
     if not node:
@@ -240,8 +248,15 @@ def chat(body: ChatIn):
     conversation = CONVERSATIONS.get(body.conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="conversation not found")
+    try:
+        content = validate_input_text(body.content, MAX_INPUT_CHARS)
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc))
+    subject = conversation.get("user_id") or body.conversation_id
+    if not rate_limit_allowed(subject, "messages", RATE_LIMIT_MAX_MESSAGES):
+        raise HTTPException(status_code=429, detail="too many messages")
 
-    risk_level = risk_level_for(body.content)
+    risk_level = risk_level_for(content)
     conversation["risk_level"] = max(conversation["risk_level"], risk_level)
     track("messages")
     if risk_level:
@@ -250,16 +265,18 @@ def chat(body: ChatIn):
             "conversation_id": body.conversation_id,
             "scene_id": conversation["scene"]["scene_id"],
             "risk_level": risk_level,
-            "trigger_text": body.content,
+            "trigger_text": content,
             "action_taken": "safety_reply" if risk_level >= 2 else "normal_reply",
         })
 
     if risk_level >= 2:
         reply = safety_reply()
     else:
-        reply = ask_model(conversation["scene"], conversation["messages"], body.content)
+        if not rate_limit_allowed(subject, "model", RATE_LIMIT_MAX_MODEL_CALLS):
+            raise HTTPException(status_code=429, detail="model rate limit reached")
+        reply = ask_model(conversation["scene"], conversation["messages"], content)
 
-    conversation["messages"].append({"role": "user", "content": body.content})
+    conversation["messages"].append({"role": "user", "content": content})
     conversation["messages"].append({"role": "assistant", "content": reply})
     return {
         "reply": reply,
@@ -295,7 +312,11 @@ def end_conversation(conversation_id: str):
 def tts(body: TTSIn):
     if os.getenv("TTS_ENABLED", "").lower() != "true":
         raise HTTPException(status_code=404, detail="tts disabled")
-    return {"audio_url": None, "text": body.text}
+    try:
+        text = validate_input_text(body.text, MAX_INPUT_CHARS)
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc))
+    return {"audio_url": None, "text": text}
 
 
 @app.post("/api/feedback")
