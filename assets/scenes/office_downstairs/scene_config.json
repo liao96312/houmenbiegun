@@ -7,6 +7,11 @@
   "video_url": "",
   "video_low_url": "",
   "audio_url": "",
+  "resource_status": {
+    "poster": "generated_static_jpeg",
+    "video": "not_provided",
+    "audio": "browser_generated_noise"
+  },
   "opening_line": "先别急着回家，在这儿缓一下。",
   "closing_line": "今天先到这儿。别把工作带回去太多。",
   "ai_style": "像刚下班的人，理解疲惫，不讲效率建议",
