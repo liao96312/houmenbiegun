@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
+import time
 from io import StringIO
 from pathlib import Path
 import csv
@@ -13,6 +15,12 @@ from app import store
 
 
 ROOT = Path(__file__).resolve().parent.parent
+MAX_INPUT_CHARS = 1200
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_MAX_MESSAGES = 30
+RATE_LIMIT_MAX_MODEL_CALLS = 20
+_RATE_BUCKETS: dict[tuple[str, str], list[float]] = {}
+_RATE_LOCK = threading.Lock()
 SCENES = json.loads((ROOT / "data" / "scenes.json").read_text(encoding="utf-8"))
 BRANCHES = json.loads((ROOT / "data" / "branches.json").read_text(encoding="utf-8"))
 DEFAULT_PROMPTS = {
@@ -25,7 +33,8 @@ DEFAULT_PROMPTS = {
         "不要用括号写动作或旁白，像真人聊天一样直接说话。",
     ],
     "safety_rule": "如果用户表达自伤、自杀、伤害他人或具体方法，立刻退出场景感，给现实安全建议并鼓励联系身边可信任的人或紧急服务。",
-    "safety_reply": "你现在的状态可能很危险。请马上联系身边可信任的人，或拨打当地紧急电话。尽量不要一个人待着。",
+    "safety_reply": "先停一下。你现在可能处在危险里，请马上联系身边可信任的人。",
+    "safety_resources": "中国大陆：心理援助热线 12356；如有立即危险，请拨打 110 或 120。",
     "fallback_suffix": "先不用把事情讲清楚，坐一会儿也行。",
 }
 PROMPTS = DEFAULT_PROMPTS | json.loads((ROOT / "data" / "prompts.json").read_text(encoding="utf-8"))
@@ -33,6 +42,10 @@ try:
     ARKSEC_STYLE = json.loads((ROOT / "data" / "external" / "arksec_prompt_style.json").read_text(encoding="utf-8"))
 except FileNotFoundError:
     ARKSEC_STYLE = {}
+try:
+    WRITING_LIBRARY = json.loads((ROOT / "data" / "writing_library.json").read_text(encoding="utf-8"))
+except FileNotFoundError:
+    WRITING_LIBRARY = {"opening_lines": [], "layers": {}, "forbidden_patterns": []}
 
 
 def arksec_prompt_lines() -> list[str]:
@@ -41,6 +54,30 @@ def arksec_prompt_lines() -> list[str]:
     if examples:
         lines += ["Arksec 变体只学节奏，不照抄：", *[f"- {line}" for line in examples]]
     return lines
+
+
+def emotion_layer_for(text: str) -> str:
+    normalized = re.sub(r"\s+", "", text or "")
+    if re.search(r"怎么办|怎么做|建议|解决|该不该|要不要", normalized):
+        return "advice_requested"
+    if re.search(r"慌|焦虑|心慌|紧张|害怕|睡不着|停不下来|来不及", normalized):
+        return "anxious"
+    if re.search(r"没感觉|麻木|空|没意思|提不起劲|不知道怎么了", normalized):
+        return "numb"
+    if re.search(r"委屈|难受|被骂|被说|失望|受不了|不公平|吵起来", normalized):
+        return "hurt"
+    return "light_fatigue"
+
+
+def writing_prompt_lines(user_text: str) -> list[str]:
+    layer = emotion_layer_for(user_text)
+    lines = WRITING_LIBRARY.get("layers", {}).get(layer, [])[:5]
+    return [
+        f"当前只参考文案层：{layer}。不要解释这个标签，也不要逐字复制下面句子。",
+        "人工审查样本（只学长度、停顿和分寸）：",
+        *[f"- {line}" for line in lines],
+        "优先保留一处具体回应，最多补一个小方向；用户没问怎么办时不要给建议。",
+    ]
 
 # 持久化层尽力而为：DB 不可写（权限/只读/沙箱）时降级为纯内存，不阻断陪伴主流程。
 # 陪伴对话本身不依赖 DB；DB 只存统计/安全事件/反馈/摘要，掉一晚上不应让产品挂掉。
@@ -57,11 +94,13 @@ _safe(store.init_db)
 ANALYTICS = _safe(store.analytics_snapshot) or {
     "scene_enter": {}, "messages": 0, "conversations": 0, "ended": 0,
     "safety_hits": 0, "duration_seconds": 0, "ai_success": 0, "ai_fallback": 0,
-    "avg_duration_seconds": 0,
+    "avg_duration_seconds": 0, "ai_attempts": 0, "ai_failures": 0,
+    "ai_latency_p50_ms": 0, "ai_latency_p95_ms": 0,
 }
 SAFETY_EVENTS = _safe(store.safety_events) or []
 FEEDBACK = _safe(store.feedback) or []
 CONVERSATION_SUMMARIES = _safe(store.conversation_summaries) or []
+MODEL_EVENTS = _safe(store.model_events) or []
 
 
 def track(name: str, key: str | None = None, amount: int = 1):
@@ -74,6 +113,30 @@ def track(name: str, key: str | None = None, amount: int = 1):
     ANALYTICS["avg_duration_seconds"] = (
         round(ANALYTICS.get("duration_seconds", 0) / ANALYTICS["ended"], 1) if ANALYTICS.get("ended") else 0
     )
+
+
+def validate_input_text(text: str, max_chars: int = MAX_INPUT_CHARS) -> str:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
+    cleaned = text.strip()
+    if not cleaned:
+        raise ValueError("text is required")
+    if len(cleaned) > max_chars:
+        raise ValueError(f"text exceeds {max_chars} characters")
+    return cleaned
+
+
+def rate_limit_allowed(subject: str, bucket: str, limit: int, window: int = RATE_LIMIT_WINDOW_SECONDS) -> bool:
+    now = time.monotonic()
+    key = (subject or "anonymous", bucket)
+    with _RATE_LOCK:
+        recent = [stamp for stamp in _RATE_BUCKETS.get(key, []) if now - stamp < window]
+        if len(recent) >= limit:
+            _RATE_BUCKETS[key] = recent
+            return False
+        recent.append(now)
+        _RATE_BUCKETS[key] = recent
+        return True
 
 
 def record_safety_event(event: dict):
@@ -89,6 +152,35 @@ def record_feedback(item: dict):
 def record_conversation_summary(item: dict):
     CONVERSATION_SUMMARIES.insert(0, item)
     _safe(store.insert_conversation_summary, item)
+
+
+def record_model_event(item: dict):
+    event = {
+        "provider": item["provider"],
+        "outcome": item["outcome"],
+        "latency_ms": int(item.get("latency_ms", 0)),
+        "error_code": item.get("error_code", ""),
+    }
+    MODEL_EVENTS.insert(0, event)
+    del MODEL_EVENTS[200:]
+    _safe(store.insert_model_event, event)
+    ANALYTICS["ai_attempts"] = ANALYTICS.get("ai_attempts", 0) + 1
+    if event["outcome"] in {"failed", "empty", "safety_rejected"}:
+        ANALYTICS["ai_failures"] = ANALYTICS.get("ai_failures", 0) + 1
+    latencies = sorted(event["latency_ms"] for event in MODEL_EVENTS)
+    if latencies:
+        ANALYTICS["ai_latency_p50_ms"] = latencies[len(latencies) // 2]
+        ANALYTICS["ai_latency_p95_ms"] = latencies[min(len(latencies) - 1, max(0, int(len(latencies) * 0.95) - 1))]
+
+
+def model_error_code(exc: Exception) -> str:
+    if isinstance(exc, HTTPError):
+        return f"http_{exc.code}"
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    if isinstance(exc, URLError):
+        return "network"
+    return type(exc).__name__.lower()
 
 
 def summarize(messages: list[dict], risk_level: int) -> str:
@@ -157,16 +249,38 @@ def write_json(path: Path, data):
 
 
 def risk_level_for(text: str) -> int:
-    level3 = ["杀人", "伤害别人", "报复", "明确计划", "跳楼", "跳河", "上吊", "割腕", "服毒", "烧炭"]
-    level2 = ["自杀", "轻生", "想死", "不想活", "活不下去", "活着没意思", "死了算了", "自残", "伤害自己"]
-    if any(word in text for word in level3):
+    normalized = re.sub(r"\s+", "", text or "")
+    if not normalized:
+        return 0
+
+    # 先排除明显的引用/否定，避免“电影里有人跳楼”把用户直接推入危机流程。
+    quoted_or_third_party = bool(re.search(r"(?:电影|新闻|小说|游戏|朋友|家人|同事|他说|她说|别人|担心他人)", normalized))
+    negated = bool(re.search(r"(?:没有|没|不是|并不|不是真的).{0,6}(?:想死|自杀|轻生|跳楼|自残|伤害自己)", normalized))
+    if quoted_or_third_party and not re.search(r"我(?:现在|已经|准备|打算|想)", normalized):
+        return 1
+    if negated and not re.search(r"(?:已经|准备|打算|今晚|现在|马上|手里|买了)", normalized):
+        return 0
+
+    level3_patterns = [
+        r"^(?:我|本人)?(?:想|要|准备|打算)(?:跳楼|跳河|上吊|割腕|服毒|杀人|伤害别人)$",
+        r"(?:我|本人)?(?:现在|今晚|今天|马上|准备|打算|已经).{0,20}(?:自杀|跳楼|跳河|上吊|割腕|服毒|吃药|结束一切)",
+        r"(?:我|本人)?(?:已经|准备|买了|拿着).{0,12}(?:药|刀|绳|煤气).{0,12}(?:自杀|结束|死|就做|下手)",
+        r"(?:我想|我要|准备|打算).{0,8}(?:杀人|伤害别人|报复到他受伤)",
+    ]
+    level2_patterns = [
+        r"(?:我|自己).{0,8}(?:自杀|轻生|想死|不想活|活不下去|活着没意思|死了算了|自残|伤害自己|结束一切)",
+        r"(?:想死|不想活|活不下去|活着没意思|死了算了|自残|伤害自己|结束一切)",
+    ]
+    if any(re.search(pattern, normalized) for pattern in level3_patterns):
         return 3
-    if any(word in text for word in level2):
+    if any(re.search(pattern, normalized) for pattern in level2_patterns):
         return 2
+    if re.search(r"(?:消失|撑不住|没用|失败|不想回家|不想面对|没有意义)", normalized):
+        return 1
     return 0
 
 
-def build_system_prompt(scene: dict) -> str:
+def build_system_prompt(scene: dict, user_text: str = "") -> str:
     character = scene.get("character", {})
     return "\n".join([
         PROMPTS["base_system"],
@@ -182,7 +296,10 @@ def build_system_prompt(scene: dict) -> str:
         "不要写像广告文案、小说旁白、疗愈语录的句子。优先像现实中能说出口的人话。",
         "不要用“你很棒、你很厉害、你值得被爱”这类模板式夸奖；用户否定自己时，用普通事实轻轻纠偏。",
         "不要编陪伴者自己的经历来安慰用户，不说“我当年、我刚来时、我以前也”；优先直接回应用户最后一句。",
+        *[f"开场规则：{rule}" for rule in PROMPTS.get("first_reply_rules", [])],
+        *[f"收尾规则：{rule}" for rule in PROMPTS.get("closing_rules", [])],
         *arksec_prompt_lines(),
+        *writing_prompt_lines(user_text),
         *PROMPTS["style_rules"],
         "下面示例只学习节奏和分寸，不能逐字照抄：",
         *[f"- {user} -> {assistant}" for user, assistant in character.get("mes_example", [])],
@@ -190,59 +307,140 @@ def build_system_prompt(scene: dict) -> str:
     ])
 
 
-def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
-    api_key = os.getenv("AI_API_KEY")
-    if not api_key:
-        track("ai_fallback")
-        return fallback_reply(scene)
+def model_provider_settings() -> list[dict]:
+    providers = {
+        "nvidia": {
+            "api_key": os.getenv("NVIDIA_API_KEY"),
+            "base_url": os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+            "model": os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-v4-pro"),
+            "request_options": {"reasoning_effort": os.getenv("NVIDIA_REASONING_EFFORT", "none")},
+        },
+        "deepseek": {
+            "api_key": os.getenv("DEEPSEEK_API_KEY"),
+            "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+            "model": os.getenv("DEEPSEEK_DEFAULT_MODEL", "deepseek-chat"),
+            "request_options": {"thinking": {"type": os.getenv("DEEPSEEK_THINKING", "disabled")}},
+        },
+        "legacy": {
+            "api_key": os.getenv("AI_API_KEY"),
+            "base_url": os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1"),
+            "model": os.getenv("AI_MODEL", "deepseek-chat"),
+            "request_options": {},
+        },
+    }
+    requested = os.getenv("AI_PROVIDER", "").strip().lower()
+    fallback = os.getenv("AI_FALLBACK_PROVIDER", "").strip().lower()
+    order = [requested, fallback] if requested else ["nvidia", "deepseek", "legacy"]
+    result = []
+    for provider in order:
+        if provider in providers and providers[provider]["api_key"] and provider not in [item["name"] for item in result]:
+            result.append({"name": provider, **providers[provider]})
+    return result
 
-    base_url = os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
-    model = os.getenv("AI_MODEL", "deepseek-chat")
-    payload = json.dumps(
-        {
-            "model": model,
+
+def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
+    settings_list = model_provider_settings()
+    if not settings_list:
+        track("ai_fallback")
+        return fallback_reply(scene, user_text)
+
+    for settings in settings_list:
+        started = time.monotonic()
+        request_body = {
+            "model": settings["model"],
             "messages": [
-                {"role": "system", "content": build_system_prompt(scene)},
+                {"role": "system", "content": build_system_prompt(scene, user_text)},
                 *history[-8:],
                 {"role": "user", "content": user_text},
             ],
             "temperature": scene.get("temperature", 0.75),
+            "max_tokens": min(int(scene.get("max_tokens", 180)), 240),
+            **settings.get("request_options", {}),
         }
-    ).encode("utf-8")
-    request = Request(
-        f"{base_url}/chat/completions",
-        data=payload,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        method="POST",
-    )
+        payload = json.dumps(request_body).encode("utf-8")
+        request = Request(
+            f"{settings['base_url'].rstrip('/')}/chat/completions",
+            data=payload,
+            headers={"Authorization": f"Bearer {settings['api_key']}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            reply = clean_reply(data["choices"][0]["message"]["content"])
+            if not reply or risk_level_for(reply) >= 2:
+                record_model_event({
+                    "provider": settings["name"],
+                    "outcome": "empty" if not reply else "safety_rejected",
+                    "latency_ms": round((time.monotonic() - started) * 1000),
+                })
+                track("ai_fallback")
+                return safety_reply() if risk_level_for(reply) >= 2 else fallback_reply(scene, user_text)
+            record_model_event({
+                "provider": settings["name"],
+                "outcome": "success",
+                "latency_ms": round((time.monotonic() - started) * 1000),
+            })
+            track("ai_success")
+            return reply
+        except (HTTPError, URLError, KeyError, IndexError, TypeError, TimeoutError, json.JSONDecodeError) as exc:
+            record_model_event({
+                "provider": settings["name"],
+                "outcome": "failed",
+                "latency_ms": round((time.monotonic() - started) * 1000),
+                "error_code": model_error_code(exc),
+            })
+            continue
+    track("ai_fallback")
+    if not settings_list:
+        record_model_event({"provider": "none", "outcome": "failed", "latency_ms": 0, "error_code": "not_configured"})
+    return fallback_reply(scene, user_text)
 
-    try:
-        with urlopen(request, timeout=20) as response:
-            data = json.loads(response.read().decode("utf-8"))
-        track("ai_success")
-        return clean_reply(data["choices"][0]["message"]["content"])
-    except (HTTPError, URLError, KeyError, TimeoutError, json.JSONDecodeError):
-        track("ai_fallback")
-        return fallback_reply(scene)
 
-
-def fallback_reply(scene: dict) -> str:
-    return f"{scene['fallback_prefix']}{PROMPTS['fallback_suffix']}"
+def fallback_reply(scene: dict, user_text: str = "") -> str:
+    layer = emotion_layer_for(user_text)
+    candidates = WRITING_LIBRARY.get("layers", {}).get(layer, [])
+    prefix = candidates[0] if candidates else scene["fallback_prefix"]
+    return f"{prefix}{PROMPTS['fallback_suffix']}"
 
 
 def clean_reply(text: str) -> str:
-    return re.sub(r"^\s*[\(（][^\)）]{1,80}[\)）]\s*", "", text.strip()).strip()
+    cleaned = re.sub(r"^\s*```(?:text|markdown)?\s*|\s*```\s*$", "", str(text or "").strip(), flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"^\s*(?:田山小姐|小林店员|林雨|周澄|阿纪|许姐|岚姐|陈姨|陪伴者|assistant|Assistant)\s*[:：]\s*",
+        "",
+        cleaned,
+    )
+    while re.match(r"^\s*[\(（][^\)）]{1,80}[\)）]\s*", cleaned):
+        cleaned = re.sub(r"^\s*[\(（][^\)）]{1,80}[\)）]\s*", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) > 120:
+        split = max(cleaned.rfind(mark, 0, 120) for mark in "。！？!?；;")
+        cleaned = cleaned[: split + 1 if split >= 40 else 120].rstrip()
+    return cleaned
 
 
 def safety_reply() -> str:
     return PROMPTS["safety_reply"]
 
 
+def safety_resources() -> str:
+    return PROMPTS.get("safety_resources", "中国大陆：心理援助热线 12356；如有立即危险，请拨打 110 或 120。")
+
+
 def config_status() -> dict:
+    configured = model_provider_settings()
+    primary = configured[0] if configured else {
+        "name": os.getenv("AI_PROVIDER", "none"),
+        "base_url": os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1"),
+        "model": os.getenv("AI_MODEL", "deepseek-chat"),
+    }
     return {
-        "ai_base_url": os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1"),
-        "ai_model": os.getenv("AI_MODEL", "deepseek-chat"),
-        "ai_configured": bool(os.getenv("AI_API_KEY")),
+        "ai_provider": primary["name"],
+        "ai_base_url": primary["base_url"],
+        "ai_model": primary["model"],
+        "ai_configured": bool(configured),
+        "ai_fallback_provider": configured[1]["name"] if len(configured) > 1 else None,
         "admin_protected": bool(os.getenv("ADMIN_TOKEN")),
         "tts_enabled": os.getenv("TTS_ENABLED", "").lower() == "true",
         "scene_count": len(SCENES),
@@ -252,7 +450,7 @@ def config_status() -> dict:
 
 def admin_token_ok(token: str | None) -> bool:
     expected = os.getenv("ADMIN_TOKEN")
-    return not expected or token == expected
+    return bool(expected) and token == expected
 
 
 def csv_text(rows: list[dict]) -> str:

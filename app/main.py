@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track
+from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, MODEL_EVENTS, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, MAX_INPUT_CHARS, RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_MAX_MODEL_CALLS, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, rate_limit_allowed, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track, validate_input_text
 
 CONVERSATIONS: dict[str, dict] = {}
 
@@ -96,6 +96,14 @@ def chat_branch(body: BranchIn):
     conversation = CONVERSATIONS.get(body.conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="conversation not found")
+    if body.user_label:
+        try:
+            body.user_label = validate_input_text(body.user_label, MAX_INPUT_CHARS)
+        except ValueError as exc:
+            raise HTTPException(status_code=413, detail=str(exc))
+    subject = conversation.get("user_id") or body.conversation_id
+    if not rate_limit_allowed(subject, "messages", RATE_LIMIT_MAX_MESSAGES):
+        raise HTTPException(status_code=429, detail="too many messages")
     scene_id = conversation["scene"]["scene_id"]
     node = branch_node(scene_id, body.node_id) if body.node_id else branch_start(scene_id)
     if not node:
@@ -123,6 +131,7 @@ def chat_branch(body: BranchIn):
         "is_ending": node["is_ending"],
         "ending_type": node["ending_type"],
         "should_end": node.get("ending_type") == "safety",
+        "safety_resources": safety_resources() if node.get("ending_type") == "safety" else None,
     }
 
 
@@ -137,7 +146,9 @@ def config():
 
 
 @app.get("/api/admin/scenes")
-def admin_scenes():
+def admin_scenes(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return SCENES
 
 
@@ -153,7 +164,9 @@ def update_admin_scenes(body: list[dict], x_admin_token: str | None = Header(def
 
 
 @app.get("/api/admin/prompts")
-def admin_prompts():
+def admin_prompts(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return PROMPTS
 
 
@@ -169,32 +182,51 @@ def update_admin_prompts(body: dict, x_admin_token: str | None = Header(default=
 
 
 @app.get("/api/admin/safety-events")
-def admin_safety_events():
+def admin_safety_events(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return SAFETY_EVENTS
 
 
 @app.get("/api/admin/feedback")
-def admin_feedback():
+def admin_feedback(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return FEEDBACK
 
 
 @app.get("/api/admin/conversations")
-def admin_conversations():
+def admin_conversations(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return CONVERSATION_SUMMARIES
 
 
+@app.get("/api/admin/model-events")
+def admin_model_events(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
+    return MODEL_EVENTS
+
+
 @app.get("/api/admin/export/safety-events.csv")
-def export_safety_events():
+def export_safety_events(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return PlainTextResponse(csv_text(SAFETY_EVENTS), media_type="text/csv; charset=utf-8")
 
 
 @app.get("/api/admin/export/feedback.csv")
-def export_feedback():
+def export_feedback(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return PlainTextResponse(csv_text(FEEDBACK), media_type="text/csv; charset=utf-8")
 
 
 @app.get("/api/admin/export/conversations.csv")
-def export_conversations():
+def export_conversations(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
     return PlainTextResponse(csv_text(CONVERSATION_SUMMARIES), media_type="text/csv; charset=utf-8")
 
 
@@ -223,8 +255,15 @@ def chat(body: ChatIn):
     conversation = CONVERSATIONS.get(body.conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="conversation not found")
+    try:
+        content = validate_input_text(body.content, MAX_INPUT_CHARS)
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc))
+    subject = conversation.get("user_id") or body.conversation_id
+    if not rate_limit_allowed(subject, "messages", RATE_LIMIT_MAX_MESSAGES):
+        raise HTTPException(status_code=429, detail="too many messages")
 
-    risk_level = risk_level_for(body.content)
+    risk_level = risk_level_for(content)
     conversation["risk_level"] = max(conversation["risk_level"], risk_level)
     track("messages")
     if risk_level:
@@ -233,18 +272,25 @@ def chat(body: ChatIn):
             "conversation_id": body.conversation_id,
             "scene_id": conversation["scene"]["scene_id"],
             "risk_level": risk_level,
-            "trigger_text": body.content,
+            "trigger_text": content,
             "action_taken": "safety_reply" if risk_level >= 2 else "normal_reply",
         })
 
     if risk_level >= 2:
         reply = safety_reply()
     else:
-        reply = ask_model(conversation["scene"], conversation["messages"], body.content)
+        if not rate_limit_allowed(subject, "model", RATE_LIMIT_MAX_MODEL_CALLS):
+            raise HTTPException(status_code=429, detail="model rate limit reached")
+        reply = ask_model(conversation["scene"], conversation["messages"], content)
 
-    conversation["messages"].append({"role": "user", "content": body.content})
+    conversation["messages"].append({"role": "user", "content": content})
     conversation["messages"].append({"role": "assistant", "content": reply})
-    return {"reply": reply, "risk_level": risk_level, "should_end": risk_level >= 3}
+    return {
+        "reply": reply,
+        "risk_level": risk_level,
+        "should_end": risk_level >= 2,
+        "safety_resources": safety_resources() if risk_level >= 2 else None,
+    }
 
 
 @app.post("/api/conversations/{conversation_id}/end")
@@ -273,7 +319,11 @@ def end_conversation(conversation_id: str):
 def tts(body: TTSIn):
     if os.getenv("TTS_ENABLED", "").lower() != "true":
         raise HTTPException(status_code=404, detail="tts disabled")
-    return {"audio_url": None, "text": body.text}
+    try:
+        text = validate_input_text(body.text, MAX_INPUT_CHARS)
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc))
+    return {"audio_url": None, "text": text}
 
 
 @app.post("/api/feedback")

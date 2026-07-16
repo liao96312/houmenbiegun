@@ -6,12 +6,18 @@ import os
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id, summarize, track
+from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, MODEL_EVENTS, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, MAX_INPUT_CHARS, RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_MAX_MODEL_CALLS, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, rate_limit_allowed, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id, summarize, track, validate_input_text
 
 
 CONVERSATIONS: dict[str, dict] = {}
+MAX_BODY_BYTES = 1_000_000
+
+
+class PayloadTooLarge(Exception):
+    pass
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -22,7 +28,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/":
             return self.file("static/index.html", "text/html; charset=utf-8")
         if path.startswith("/static/"):
-            return self.file(path.lstrip("/"), mimetypes.guess_type(path)[0] or "application/octet-stream")
+            return self.file(
+                path.lstrip("/"),
+                mimetypes.guess_type(path)[0] or "application/octet-stream",
+                allowed_root=ROOT / "static",
+            )
         if path == "/admin":
             return self.file("static/admin.html", "text/html; charset=utf-8")
         if path == "/api/scenes":
@@ -42,6 +52,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(config_status())
         if path == "/api/auth/login":
             return self.json({"user_id": str(uuid.uuid4()), "provider": "anonymous"})
+        if path.startswith("/api/admin/") and not admin_token_ok(self.headers.get("X-Admin-Token")):
+            return self.error(401, "admin token required")
         if path == "/api/admin/scenes":
             return self.json(SCENES)
         if path == "/api/admin/prompts":
@@ -52,6 +64,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(FEEDBACK)
         if path == "/api/admin/conversations":
             return self.json(CONVERSATION_SUMMARIES)
+        if path == "/api/admin/model-events":
+            return self.json(MODEL_EVENTS)
         if path == "/api/admin/export/safety-events.csv":
             return self.text(csv_text(SAFETY_EVENTS), "text/csv; charset=utf-8")
         if path == "/api/admin/export/feedback.csv":
@@ -69,7 +83,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        body = self.body()
+        try:
+            body = self.body()
+        except PayloadTooLarge:
+            return self.error(413, "request too large")
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            return self.error(400, "invalid json")
         if path == "/api/conversations":
             scene = scene_by_id(body.get("scene_id", ""))
             if not scene:
@@ -91,7 +110,13 @@ class Handler(BaseHTTPRequestHandler):
             conversation = CONVERSATIONS.get(body.get("conversation_id", ""))
             if not conversation:
                 return self.error(404, "conversation not found")
-            content = body.get("content", "")
+            try:
+                content = validate_input_text(body.get("content", ""), MAX_INPUT_CHARS)
+            except ValueError as exc:
+                return self.error(413, str(exc))
+            subject = conversation.get("user_id") or body.get("conversation_id", "")
+            if not rate_limit_allowed(subject, "messages", RATE_LIMIT_MAX_MESSAGES):
+                return self.error(429, "too many messages")
             risk_level = risk_level_for(content)
             conversation["risk_level"] = max(conversation["risk_level"], risk_level)
             track("messages")
@@ -104,21 +129,33 @@ class Handler(BaseHTTPRequestHandler):
                     "trigger_text": content,
                     "action_taken": "safety_reply" if risk_level >= 2 else "normal_reply",
                 })
-            reply = (
-                safety_reply()
-                if risk_level >= 2
-                else ask_model(conversation["scene"], conversation["messages"], content)
-            )
+            if risk_level < 2 and not rate_limit_allowed(subject, "model", RATE_LIMIT_MAX_MODEL_CALLS):
+                return self.error(429, "model rate limit reached")
+            reply = safety_reply() if risk_level >= 2 else ask_model(conversation["scene"], conversation["messages"], content)
             conversation["messages"].extend([
                 {"role": "user", "content": content},
                 {"role": "assistant", "content": reply},
             ])
-            return self.json({"reply": reply, "risk_level": risk_level, "should_end": risk_level >= 3})
+            return self.json({
+                "reply": reply,
+                "risk_level": risk_level,
+                "should_end": risk_level >= 2,
+                "safety_resources": safety_resources() if risk_level >= 2 else None,
+            })
 
         if path == "/api/chat/branch":
             conversation = CONVERSATIONS.get(body.get("conversation_id", ""))
             if not conversation:
                 return self.error(404, "conversation not found")
+            user_label = body.get("user_label")
+            if user_label:
+                try:
+                    user_label = validate_input_text(user_label, MAX_INPUT_CHARS)
+                except ValueError as exc:
+                    return self.error(413, str(exc))
+            subject = conversation.get("user_id") or body.get("conversation_id", "")
+            if not rate_limit_allowed(subject, "messages", RATE_LIMIT_MAX_MESSAGES):
+                return self.error(429, "too many messages")
             scene_id = conversation["scene"]["scene_id"]
             node_id = body.get("node_id")
             if node_id:
@@ -143,7 +180,6 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 reply = node["companion_line"]
             # 把分支回复也记进会话历史，方便后续自由聊天接续
-            user_label = body.get("user_label")
             if user_label:
                 conversation["messages"].append({"role": "user", "content": user_label})
             conversation["messages"].append({"role": "assistant", "content": reply})
@@ -155,6 +191,7 @@ class Handler(BaseHTTPRequestHandler):
                 "is_ending": node["is_ending"],
                 "ending_type": node["ending_type"],
                 "should_end": node.get("ending_type") == "safety",
+                "safety_resources": safety_resources() if node.get("ending_type") == "safety" else None,
             })
 
         if path.startswith("/api/conversations/") and path.endswith("/end"):
@@ -199,7 +236,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/tts":
             if os.getenv("TTS_ENABLED", "").lower() != "true":
                 return self.error(404, "tts disabled")
-            return self.json({"audio_url": None, "text": body.get("text", "")})
+            try:
+                text = validate_input_text(body.get("text", ""), MAX_INPUT_CHARS)
+            except ValueError as exc:
+                return self.error(413, str(exc))
+            return self.json({"audio_url": None, "text": text})
 
         if path == "/api/feedback":
             if body.get("type") not in {"like", "dislike", "report"}:
@@ -215,6 +256,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def body(self):
         size = int(self.headers.get("Content-Length", "0"))
+        if size > MAX_BODY_BYTES:
+            raise PayloadTooLarge()
         if not size:
             return {}
         raw = self.rfile.read(size)
@@ -231,8 +274,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
-    def file(self, relative_path, content_type):
-        payload = (ROOT / relative_path).read_bytes()
+    def file(self, relative_path, content_type, allowed_root=None):
+        root = ROOT.resolve()
+        candidate = (root / unquote(relative_path)).resolve()
+        if candidate != root and root not in candidate.parents:
+            return self.error(404, "not found")
+        if allowed_root is not None:
+            allowed = Path(allowed_root).resolve()
+            if candidate != allowed and allowed not in candidate.parents:
+                return self.error(404, "not found")
+        if not candidate.is_file():
+            return self.error(404, "not found")
+        payload = candidate.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
@@ -253,6 +306,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"http://127.0.0.1:{port}")
+    host = os.getenv("HOST", "127.0.0.1")
+    server = ThreadingHTTPServer((host, port), Handler)
+    print(f"http://{host}:{port}")
     server.serve_forever()

@@ -1,12 +1,17 @@
 {
   "scene_id": "convenience_store_night",
   "display_name": "深夜便利店",
-  "description": "凌晨的便利店还亮着灯，门口有塑料椅，冰柜有轻微嗡嗡声。",
+  "description": "凌晨的便利店还亮着灯，门口有塑料椅，冰柜有轻微嗡嗡声。像夜里还能借你一口气的地方。",
   "visual_type": "static_image",
-  "poster_url": "/static/posters/convenience_store_night.svg",
+  "poster_url": "/static/posters/convenience_store_night.jpg",
   "video_url": "",
   "video_low_url": "",
   "audio_url": "",
+  "resource_status": {
+    "poster": "generated_static_jpeg",
+    "video": "not_provided",
+    "audio": "browser_generated_noise"
+  },
   "opening_line": "进来坐会儿也行。",
   "closing_line": "今天先到这儿。路上慢点。",
   "ai_style": "有人情味，保持距离，不像恋人，不像客服",
@@ -30,7 +35,7 @@
         "小林店员：嗯，那种感觉挺难受的。你先坐会儿，我在这。"
       ]
     ],
-    "avatar_url": "/static/characters/xiaolin_clerk.png",
+    "avatar_url": "/static/characters/thumbs/xiaolin_clerk.webp",
     "image_prompt": "Adult anime-style night convenience store clerk, cool white store light, plastic chair by glass door, gentle teasing smile, simple uniform jacket, warm but distant, visual novel character portrait, no logos, no text, no nudity."
   }
 }

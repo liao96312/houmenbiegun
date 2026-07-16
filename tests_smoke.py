@@ -9,9 +9,11 @@ from app.core import (
     clean_reply,
     config_status,
     csv_text,
+    emotion_layer_for,
     fallback_reply,
     risk_level_for,
     safety_reply,
+    safety_resources,
     summarize,
 )
 
@@ -28,6 +30,8 @@ def demo():
         avatar_url = item["character"]["avatar_url"]
         assert avatar_url.startswith("/static/characters/")
         assert (Path("static") / avatar_url.removeprefix("/static/")).exists()
+        exported = json.loads((Path("assets/scenes") / item["scene_id"] / "scene_config.json").read_text(encoding="utf-8"))
+        assert exported == item
     assert "DeepSeek" not in build_system_prompt(scene)
     assert scene["character"]["name"] in build_system_prompt(scene)
     assert "参考 arksec 语料时只学短句节奏" in build_system_prompt(scene)
@@ -42,16 +46,24 @@ def demo():
     assert "心理医生" in build_system_prompt(scene)
     assert "CBT" in build_system_prompt(scene)
     assert safety_reply() == PROMPTS["safety_reply"]
-    assert admin_token_ok(None)
+    assert not admin_token_ok(None)
     assert config_status()["scene_count"] >= 8
     assert risk_level_for("今天有点烦") == 0
     assert risk_level_for("我不想活了") == 2
     assert risk_level_for("我想跳楼") == 3
     assert risk_level_for("我想伤害别人") == 3
+    assert risk_level_for("电影里有人跳楼") == 1
+    assert risk_level_for("我打算今晚吃完这瓶药结束一切") == 3
+    assert risk_level_for("我没有想死，你别担心") == 0
+    assert "12356" in safety_resources()
     assert fallback_reply(scene).endswith("坐一会儿也行。")
     assert clean_reply("（把烟拿开）怎么了？") == "怎么了？"
+    assert clean_reply("田山小姐：嗯，先坐会儿。") == "嗯，先坐会儿。"
     assert "高风险" in summarize([{"role": "user", "content": "我想跳楼"}], 3)
     assert "a,b" in csv_text([{"a": 1, "b": 2}])
+    assert emotion_layer_for("我现在很慌，脑子停不下来") == "anxious"
+    assert emotion_layer_for("那我该怎么办") == "advice_requested"
+    assert "当前只参考文案层" in build_system_prompt(scene, "今天被骂得很委屈")
 
 
 if __name__ == "__main__":

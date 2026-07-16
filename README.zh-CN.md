@@ -19,7 +19,7 @@
 - **自由聊天**（默认）：接 OpenAI 兼容模型（DeepSeek 等），1–3 句人话，先接住不解决。
 - **分支陪伴**（「不知道说什么」时）：离线分支对话树，不依赖大模型，每一句都是手写的、到位的话。
 - **陪伴手法解析**：打开「解析」开关，每句回复下方显示一条分析，点出背后的倾听原则（先接住不解决、把今天和整个人切开、允许沉默……）。
-- **多结局 + 安全转介**：分支按情绪走向收尾（松了一点 / 今晚先到这儿 / 安全转介）；出现自伤自杀信号时退出场景感，给现实安全建议与援助热线（400‑161‑9995 / 120）。
+- **多结局 + 安全转介**：分支按情绪走向收尾（松了一点 / 今晚先到这儿 / 安全转介）；出现自伤自杀信号时退出场景感，给现实安全建议与援助热线（中国大陆 12356；立即危险 110 / 120）。
 
 > ⚠️ 本项目是情绪陪伴工具，**不是心理医生，不做诊断、不开药、不替代专业治疗**。遇到高风险表达会立即转现实安全资源。
 
@@ -34,7 +34,7 @@
 | 安全转介 | 风险分级（0–3），自伤/自杀/伤人信号触发安全回复与热线 |
 | 后台管理 | 编辑场景/Prompt JSON，查看安全事件/反馈/对话，CSV 导出 |
 | 数据与隐私 | SQLite 本地存储运行数据（本地生成，不入库），匿名登录 |
-| TTS | 可选服务端 TTS；前端另有浏览器原生朗读开关 |
+| TTS | 浏览器原生朗读；服务端 TTS 仅预留，默认关闭 |
 | 部署 | Docker / Docker Compose / nginx，内置健康检查 |
 
 ## 场景一览
@@ -61,7 +61,7 @@ flowchart LR
   API --> Branch["分支陪伴引擎"]
   Branch --> JSON["data/branches.json（离线）"]
   API --> Safety["风险分级 + 安全转介"]
-  Safety --> Hotline["援助热线 400-161-9995 / 120"]
+  Safety --> Hotline["援助热线 12356 / 110 / 120"]
   API --> Admin["后台：场景 / Prompt / 安全事件"]
   Admin --> JSON
   API --> Store["SQLite 运行数据"]
@@ -85,7 +85,7 @@ flowchart LR
 
 ### 安全转介
 
-检测到自伤、自杀、伤害他人或具体方法时，退出场景感，给现实安全建议，并提示联系身边可信任的人或紧急服务（120）。
+检测到自伤、自杀、伤害他人或具体方法时，退出场景感，给现实安全建议，并提示联系身边可信任的人或紧急服务（中国大陆心理援助热线 12356；立即危险拨打 110 / 120）。
 
 ## 技术栈
 
@@ -134,11 +134,7 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-可选 TTS（默认关闭）：
-
-```powershell
-$env:TTS_ENABLED="true"
-```
+朗读默认关闭，用户端使用浏览器原生语音；服务端 TTS 接口目前只保留配置位，不作为一期验收项。
 
 ## 配置说明
 
@@ -148,7 +144,17 @@ $env:TTS_ENABLED="true"
 AI_API_KEY=你的 OpenAI 兼容 key
 AI_BASE_URL=https://api.deepseek.com/v1
 AI_MODEL=deepseek-chat
-TTS_ENABLED=false
+AI_PROVIDER=nvidia
+AI_FALLBACK_PROVIDER=deepseek
+NVIDIA_API_KEY=你的 NVIDIA API key
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_MODEL=deepseek-ai/deepseek-v4-pro
+NVIDIA_REASONING_EFFORT=none
+DEEPSEEK_API_KEY=你的兼容接口 key
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_DEFAULT_MODEL=deepseek-chat
+DEEPSEEK_THINKING=disabled
+TTS_ENABLED=false # 服务端 TTS 预留，保持关闭
 ADMIN_TOKEN=部署公网前设置一个强口令
 ```
 

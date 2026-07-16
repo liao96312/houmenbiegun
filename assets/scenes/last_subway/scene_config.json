@@ -1,12 +1,17 @@
 {
   "scene_id": "last_subway",
   "display_name": "末班地铁",
-  "description": "车厢轻轻晃着，广告灯还亮，空座位比白天多很多。",
+  "description": "车厢轻轻晃着，广告灯还亮，空座位比白天多很多。人少的时候，脑子也能稍微慢一点。",
   "visual_type": "static_image",
-  "poster_url": "/static/posters/last_subway.svg",
+  "poster_url": "/static/posters/last_subway.jpg",
   "video_url": "",
   "video_low_url": "",
   "audio_url": "",
+  "resource_status": {
+    "poster": "generated_static_jpeg",
+    "video": "not_provided",
+    "audio": "browser_generated_noise"
+  },
   "opening_line": "先坐下吧。",
   "closing_line": "今晚先少想一点。",
   "ai_style": "低声，放空，不追问，不催人振作",
@@ -30,7 +35,7 @@
         "阿纪：嗯，今天可能就是不顺。不是你整个人不行。"
       ]
     ],
-    "avatar_url": "/static/characters/aki_subway.png",
+    "avatar_url": "/static/characters/thumbs/aki_subway.webp",
     "image_prompt": "Adult anime woman on last subway train at night, empty seats, soft ad lights, tired relaxed expression, urban loneliness, visual novel portrait, no text, no watermark."
   }
 }
