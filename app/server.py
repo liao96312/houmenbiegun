@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, MAX_INPUT_CHARS, RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_MAX_MODEL_CALLS, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, rate_limit_allowed, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id, summarize, track, validate_input_text
+from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, MODEL_EVENTS, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, MAX_INPUT_CHARS, RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_MAX_MODEL_CALLS, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, rate_limit_allowed, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id, summarize, track, validate_input_text
 
 
 CONVERSATIONS: dict[str, dict] = {}
@@ -64,6 +64,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(FEEDBACK)
         if path == "/api/admin/conversations":
             return self.json(CONVERSATION_SUMMARIES)
+        if path == "/api/admin/model-events":
+            return self.json(MODEL_EVENTS)
         if path == "/api/admin/export/safety-events.csv":
             return self.text(csv_text(SAFETY_EVENTS), "text/csv; charset=utf-8")
         if path == "/api/admin/export/feedback.csv":

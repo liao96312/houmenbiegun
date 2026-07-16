@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.core import SCENES, ask_model, fallback_reply
+from app.core import MODEL_EVENTS, SCENES, ask_model, fallback_reply
 
 
 class FakeResponse:
@@ -37,6 +37,7 @@ def main() -> int:
         "malformed": FakeResponse({"choices": []}),
     }
     failures: list[str] = []
+    events_before = len(MODEL_EVENTS)
     try:
         with patch("app.core.urlopen", return_value=responses["success"]):
             if ask_model(scene, history, "今天被工作烦到了") == fallback_reply(scene, "今天被工作烦到了"):
@@ -62,6 +63,8 @@ def main() -> int:
             os.environ.pop("AI_API_KEY", None)
         else:
             os.environ["AI_API_KEY"] = old_key
+    if len(MODEL_EVENTS) <= events_before:
+        failures.append("model events were not recorded")
     if failures:
         print("model contract failed")
         print("\n".join(f"- {item}" for item in failures))

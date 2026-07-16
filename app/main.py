@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, MAX_INPUT_CHARS, RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_MAX_MODEL_CALLS, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, rate_limit_allowed, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track, validate_input_text
+from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, MODEL_EVENTS, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, MAX_INPUT_CHARS, RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_MAX_MODEL_CALLS, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, rate_limit_allowed, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track, validate_input_text
 
 CONVERSATIONS: dict[str, dict] = {}
 
@@ -200,6 +200,13 @@ def admin_conversations(x_admin_token: str | None = Header(default=None)):
     if not admin_token_ok(x_admin_token):
         raise HTTPException(status_code=401, detail="admin token required")
     return CONVERSATION_SUMMARIES
+
+
+@app.get("/api/admin/model-events")
+def admin_model_events(x_admin_token: str | None = Header(default=None)):
+    if not admin_token_ok(x_admin_token):
+        raise HTTPException(status_code=401, detail="admin token required")
+    return MODEL_EVENTS
 
 
 @app.get("/api/admin/export/safety-events.csv")

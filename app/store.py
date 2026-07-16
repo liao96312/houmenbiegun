@@ -51,6 +51,14 @@ def init_db():
               duration_seconds INTEGER NOT NULL,
               created_at REAL NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS model_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              provider TEXT NOT NULL,
+              outcome TEXT NOT NULL,
+              latency_ms INTEGER NOT NULL,
+              error_code TEXT NOT NULL DEFAULT '',
+              created_at REAL NOT NULL
+            );
             """
         )
 
@@ -83,6 +91,13 @@ def analytics_snapshot() -> dict:
                 snapshot["scene_enter"][row["key"]] = row["value"]
             else:
                 snapshot[row["name"]] = row["value"]
+        model_rows = list(db.execute("SELECT outcome, latency_ms FROM model_events ORDER BY id DESC LIMIT 200"))
+    if model_rows:
+        latencies = sorted(row["latency_ms"] for row in model_rows)
+        snapshot["ai_attempts"] = len(model_rows)
+        snapshot["ai_failures"] = sum(row["outcome"] in {"failed", "empty", "safety_rejected"} for row in model_rows)
+        snapshot["ai_latency_p50_ms"] = latencies[len(latencies) // 2]
+        snapshot["ai_latency_p95_ms"] = latencies[min(len(latencies) - 1, max(0, int(len(latencies) * 0.95) - 1))]
     snapshot["avg_duration_seconds"] = (
         round(snapshot["duration_seconds"] / snapshot["ended"], 1) if snapshot["ended"] else 0
     )
@@ -147,3 +162,16 @@ def insert_conversation_summary(item: dict):
 def conversation_summaries() -> list[dict]:
     with connect() as db:
         return [dict(row) for row in db.execute("SELECT * FROM conversation_summaries ORDER BY id DESC LIMIT 100")]
+
+
+def insert_model_event(event: dict):
+    with connect() as db:
+        db.execute(
+            "INSERT INTO model_events (provider, outcome, latency_ms, error_code, created_at) VALUES (?, ?, ?, ?, ?)",
+            (event["provider"], event["outcome"], event["latency_ms"], event.get("error_code", ""), time()),
+        )
+
+
+def model_events() -> list[dict]:
+    with connect() as db:
+        return [dict(row) for row in db.execute("SELECT * FROM model_events ORDER BY id DESC LIMIT 200")]

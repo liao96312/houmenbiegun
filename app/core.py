@@ -94,11 +94,13 @@ _safe(store.init_db)
 ANALYTICS = _safe(store.analytics_snapshot) or {
     "scene_enter": {}, "messages": 0, "conversations": 0, "ended": 0,
     "safety_hits": 0, "duration_seconds": 0, "ai_success": 0, "ai_fallback": 0,
-    "avg_duration_seconds": 0,
+    "avg_duration_seconds": 0, "ai_attempts": 0, "ai_failures": 0,
+    "ai_latency_p50_ms": 0, "ai_latency_p95_ms": 0,
 }
 SAFETY_EVENTS = _safe(store.safety_events) or []
 FEEDBACK = _safe(store.feedback) or []
 CONVERSATION_SUMMARIES = _safe(store.conversation_summaries) or []
+MODEL_EVENTS = _safe(store.model_events) or []
 
 
 def track(name: str, key: str | None = None, amount: int = 1):
@@ -150,6 +152,35 @@ def record_feedback(item: dict):
 def record_conversation_summary(item: dict):
     CONVERSATION_SUMMARIES.insert(0, item)
     _safe(store.insert_conversation_summary, item)
+
+
+def record_model_event(item: dict):
+    event = {
+        "provider": item["provider"],
+        "outcome": item["outcome"],
+        "latency_ms": int(item.get("latency_ms", 0)),
+        "error_code": item.get("error_code", ""),
+    }
+    MODEL_EVENTS.insert(0, event)
+    del MODEL_EVENTS[200:]
+    _safe(store.insert_model_event, event)
+    ANALYTICS["ai_attempts"] = ANALYTICS.get("ai_attempts", 0) + 1
+    if event["outcome"] in {"failed", "empty", "safety_rejected"}:
+        ANALYTICS["ai_failures"] = ANALYTICS.get("ai_failures", 0) + 1
+    latencies = sorted(event["latency_ms"] for event in MODEL_EVENTS)
+    if latencies:
+        ANALYTICS["ai_latency_p50_ms"] = latencies[len(latencies) // 2]
+        ANALYTICS["ai_latency_p95_ms"] = latencies[min(len(latencies) - 1, max(0, int(len(latencies) * 0.95) - 1))]
+
+
+def model_error_code(exc: Exception) -> str:
+    if isinstance(exc, HTTPError):
+        return f"http_{exc.code}"
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    if isinstance(exc, URLError):
+        return "network"
+    return type(exc).__name__.lower()
 
 
 def summarize(messages: list[dict], risk_level: int) -> str:
@@ -314,6 +345,7 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
         return fallback_reply(scene, user_text)
 
     for settings in settings_list:
+        started = time.monotonic()
         request_body = {
             "model": settings["model"],
             "messages": [
@@ -337,13 +369,31 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
                 data = json.loads(response.read().decode("utf-8"))
             reply = clean_reply(data["choices"][0]["message"]["content"])
             if not reply or risk_level_for(reply) >= 2:
+                record_model_event({
+                    "provider": settings["name"],
+                    "outcome": "empty" if not reply else "safety_rejected",
+                    "latency_ms": round((time.monotonic() - started) * 1000),
+                })
                 track("ai_fallback")
                 return safety_reply() if risk_level_for(reply) >= 2 else fallback_reply(scene, user_text)
+            record_model_event({
+                "provider": settings["name"],
+                "outcome": "success",
+                "latency_ms": round((time.monotonic() - started) * 1000),
+            })
             track("ai_success")
             return reply
-        except (HTTPError, URLError, KeyError, IndexError, TypeError, TimeoutError, json.JSONDecodeError):
+        except (HTTPError, URLError, KeyError, IndexError, TypeError, TimeoutError, json.JSONDecodeError) as exc:
+            record_model_event({
+                "provider": settings["name"],
+                "outcome": "failed",
+                "latency_ms": round((time.monotonic() - started) * 1000),
+                "error_code": model_error_code(exc),
+            })
             continue
     track("ai_fallback")
+    if not settings_list:
+        record_model_event({"provider": "none", "outcome": "failed", "latency_ms": 0, "error_code": "not_configured"})
     return fallback_reply(scene, user_text)
 
 
