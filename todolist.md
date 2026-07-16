@@ -694,3 +694,4 @@
 - [x] P0 真实场景资源：8 张场景 poster 已替换为统一风格 JPEG，8 张人物头像已提供 160px WebP 缩略图；新增 `python scripts/check_media.py` 校验格式、大小和配置漂移。
 - [x] P0 请求边界：FastAPI 与零依赖入口共用单轮 1200 字符、用户消息 30/分钟、模型调用 20/分钟限制；新增 `python scripts/check_limits.py` 验证 413/429/TTS 404。
 - [x] P1 模型观测：记录 provider、success/fail/empty/safety_rejected、错误类别和耗时，计算最近 200 次 p50/p95，并通过管理员鉴权接口读取。
+- [x] P1 API 合同：新增 `python scripts/check_api_contract.py`，对 FastAPI 与零依赖服务器共同验证健康检查、场景、后台鉴权、建会话和输入限制。

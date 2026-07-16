@@ -28,3 +28,5 @@ jobs:
         run: python scripts/check_media.py
       - name: Check request limits
         run: python scripts/check_limits.py
+      - name: Check API contract
+        run: python scripts/check_api_contract.py
