@@ -3,7 +3,7 @@
   "display_name": "公司楼下",
   "description": "写字楼的灯还没全灭，门口台阶有夜风，保安亭亮着小灯。下班了，但人还没完全松开。",
   "visual_type": "static_image",
-  "poster_url": "/static/posters/office_downstairs.svg",
+  "poster_url": "/static/posters/office_downstairs.jpg",
   "video_url": "",
   "video_low_url": "",
   "audio_url": "",
@@ -30,7 +30,7 @@
         "许姐：今晚先别判这么大。被说两句很烦，但不等于你整个人不行。"
       ]
     ],
-    "avatar_url": "/static/characters/xujie_office.png",
+    "avatar_url": "/static/characters/thumbs/xujie_office.webp",
     "image_prompt": "Adult anime woman near office building security booth at night, holding warm cup, city office lights, straightforward caring expression, grounded visual novel portrait, no text."
   }
 }

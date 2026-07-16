@@ -3,7 +3,7 @@
   "display_name": "车里坐一会儿",
   "description": "车窗上有雨滴，仪表盘有一点微光，外面的路灯模糊成一片。像把门关上以后，外面先停一停的地方。",
   "visual_type": "static_image",
-  "poster_url": "/static/posters/car_rain.svg",
+  "poster_url": "/static/posters/car_rain.jpg",
   "video_url": "",
   "video_low_url": "",
   "audio_url": "",
@@ -30,7 +30,7 @@
         "周澄：嗯，烦就先烦着。别急着把自己劝好。"
       ]
     ],
-    "avatar_url": "/static/characters/zhoucheng_car.png",
+    "avatar_url": "/static/characters/thumbs/zhoucheng_car.webp",
     "image_prompt": "Adult anime woman sitting in passenger seat of parked car at rainy night, dashboard glow, raindrops on window, calm reliable expression, soft low-light visual novel portrait, no text, no nudity."
   }
 }

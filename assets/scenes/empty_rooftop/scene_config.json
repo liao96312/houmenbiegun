@@ -3,7 +3,7 @@
   "display_name": "没人的天台",
   "description": "城市远处有红色航空灯，风比楼下大一点，四周很空。这里不适合逞强，先往里站一点。",
   "visual_type": "static_image",
-  "poster_url": "/static/posters/empty_rooftop.svg",
+  "poster_url": "/static/posters/empty_rooftop.jpg",
   "video_url": "",
   "video_low_url": "",
   "audio_url": "",
@@ -30,7 +30,7 @@
         "岚姐：我听见了。现在先离边上远点，给一个能来找你的人发消息。"
       ]
     ],
-    "avatar_url": "/static/characters/lanjie_rooftop.png",
+    "avatar_url": "/static/characters/thumbs/lanjie_rooftop.webp",
     "image_prompt": "Adult anime woman on city rooftop at night, red aviation lights far away, wind moving coat, calm protective expression, standing safely away from edge, no dangerous pose, visual novel portrait."
   }
 }

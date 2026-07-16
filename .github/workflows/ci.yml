@@ -24,3 +24,5 @@ jobs:
         run: python scripts/check_safety_cases.py
       - name: Check model contract
         run: python scripts/check_model_contract.py
+      - name: Check media assets
+        run: python scripts/check_media.py

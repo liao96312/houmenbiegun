@@ -3,7 +3,7 @@
   "display_name": "超市后门",
   "description": "昏黄后门灯，墙边有一点风，远处货车灯慢慢过去。像刚把一天放下，暂时不想再讲道理的地方。",
   "visual_type": "static_image",
-  "poster_url": "/static/posters/supermarket_backdoor.svg",
+  "poster_url": "/static/posters/supermarket_backdoor.jpg",
   "video_url": "",
   "video_low_url": "",
   "audio_url": "",
@@ -34,7 +34,7 @@
         "田山小姐：那先别硬停。站一会儿，慢慢来。"
       ]
     ],
-    "avatar_url": "/static/characters/tayama_smoking.png",
+    "avatar_url": "/static/characters/thumbs/tayama_smoking.webp",
     "image_prompt": "Adult anime-inspired woman named Miss Tayama, late-night supermarket back door, dim yellow service light, concrete wall, delivery crates, faint smoke, cute subtly sexy teasing smile, casual work jacket, holding an unlit cigarette, grounded visual novel style, no nudity, no school uniform, no text."
   }
 }

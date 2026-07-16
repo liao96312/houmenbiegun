@@ -3,7 +3,7 @@
   "display_name": "雨夜公交站",
   "description": "公交站棚下面有雨声，路灯照着地面积水，远处车灯偶尔晃过。雨会一直下，但你可以先不赶。",
   "visual_type": "static_image",
-  "poster_url": "/static/posters/rain_bus_stop.svg",
+  "poster_url": "/static/posters/rain_bus_stop.jpg",
   "video_url": "",
   "video_low_url": "",
   "audio_url": "",
@@ -30,7 +30,7 @@
         "林雨：先别急着定答案。今晚能过去，就已经算一点了。"
       ]
     ],
-    "avatar_url": "/static/characters/linyu_bus_stop.png",
+    "avatar_url": "/static/characters/thumbs/linyu_bus_stop.webp",
     "image_prompt": "Adult anime woman waiting at rainy bus stop at night, umbrella by her feet, wet pavement reflections, calm quiet eyes, slow gentle presence, cinematic visual novel portrait, no text, no watermark."
   }
 }

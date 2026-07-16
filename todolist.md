@@ -691,3 +691,4 @@
 - [x] P1 DeepSeek 契约：新增 `python scripts/check_model_contract.py`，离线覆盖成功、401、429、5xx、超时、网络失败、空响应和异常响应降级。
 - [x] P1 TTS 状态：确认 `TTS_ENABLED=false` 时 FastAPI 与零依赖入口统一返回 404，不把空 `audio_url` 伪装成已接入。
 - [x] P1 多模型配置：接入 NVIDIA 主模型和备用 OpenAI 兼容接口；NVIDIA 使用 `reasoning_effort=none`，GLM 兼容接口使用 `thinking=disabled`，并完成真实单轮请求验证。
+- [x] P0 真实场景资源：8 张场景 poster 已替换为统一风格 JPEG，8 张人物头像已提供 160px WebP 缩略图；新增 `python scripts/check_media.py` 校验格式、大小和配置漂移。
