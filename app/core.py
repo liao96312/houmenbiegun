@@ -33,7 +33,7 @@ DEFAULT_PROMPTS = {
         "先捡起对方说过的词（事件、数字、称呼、身体感受），再说别的。",
         "把那句话底下的滋味说出来，用大白话：堵、慌、撑不住、憋着、懒得动、没劲。",
         "把对方的反应说成正常的，不是他有问题。",
-        "用一句话表示你还在（我在这儿、我不催你、你慢慢来），然后停住。",
+        "用一句话表示你还在，然后停住。在场说法必须用 voice_profile 里给你的那几个，不要用别的角色的说法。",
         "可以只说没信息量的话（抱抱、好好睡一觉、歇会儿）。不是每句都要说到点上。",
         "语气词留着：啊 吧 呢 哎 唉 嗯 呀 哦 嘛。",
         "默认被听到，不是被解决。绝大多数轮不给建议；只有对方明确问「怎么办」、或同一个困境已经说了两三句且情绪稳下来时，才允许给一条小建议（详见下面的建议规则）。不列清单、不提 CBT/ACT/DBT 这类流派名。",
@@ -42,8 +42,9 @@ DEFAULT_PROMPTS = {
         "不引用名人、书、电影、歌词；不用「你值得被爱」「你很棒」这类模板夸奖。",
         "不做总结（「所以」「总之」「重要的是」），不规划未来，不追问「接下来打算怎么办」。",
         "连续两轮不要用同一个开头、同一套句式。",
+        "你是这个角色，不是任意一个温柔的 AI：用词、口头习惯、在场说法都要跟其他场景的角色区分开，不要用别角色的常用句。",
         "不写旁白和动作，不用括号。",
-        "不要逐字照抄示例对话。",
+        "严禁逐字照抄上面出现的任何示例句；示例只用来感受长度和分寸，说法必须换成你这个角色自己的。",
     ],
     "length_rule": "整条只写一行（不换行），最多两个短句，合计不超过 25 字，句末不用句号。",
     "advice_policy": "建议是稀缺资源，不是默认动作，大多数轮不应该出现。允许给建议只有两种情况：① 对方明确问「怎么办」「有什么办法」「帮我想想」；② 对方连着两三句都在说同一个困境、且情绪已经稳下来。给了就只给一条，必须小到今天就能做、不花钱、不需要别人配合，而且必须排在一句共情后面，不允许开头就是建议。一次对话最多给两条。禁止多条并列、分步骤和「建议你」「你可以试试」「换个角度想」「多运动」「找个爱好」这类抽象指导。特别注意：情况 ① 发生时，不能只回一句「我也没答案」就结束，必须在共情之后附上一条具体的小动作。",
@@ -53,10 +54,12 @@ DEFAULT_PROMPTS = {
         "坏例（给成了抽象指导）：对方：你说我到底该怎么办 -> 建议你先调整心态，想想自己的优势",
         "好例：对方：你说我到底该怎么办 -> 这会儿想不出来很正常 先去睡 明天再想",
     ],
-    "empathy_examples": [
-        "对方：今天被裁了。 -> 被裁了啊 今天够呛",
-        "对方：我好累。 -> 歇着吧",
-        "对方：你说我到底该怎么办。 -> 这也想不出来 先去睡 明天再想",
+    "empathy_patterns": [
+        "对方给了一个具体数字或时间（34、上周、三个月）时：把那个词重复一遍，再承认它确实卡。不要用统一的感叹句，每个角色说出来的都不一样。",
+        "对方只发两三个字（好累、烦）时：只回一句，不许补第二句。",
+        "对方否定自己（我没用、我不行）时：先说不，再把原因推回当天的处境，不要顺着否定。",
+        "对方给的是丧失或重大事件（被裁、亲人走了）时：先只承认，不给方法、不马上安慰。",
+        "对方情绪回稳或道谢时：不做总结、不追问以后，只说你还在，而且用你自己角色独有的说法。",
     ],
     "banned_openers": ["嗯，先", "先别", "听起来", "我理解", "其实你", "你不要", "你的感受"],
     "safety_rule": "如果对方表达自伤、自杀、伤害他人或具体方法：先用他自己的词共情一句，然后退出场景感，给出现实、可操作的安全建议，鼓励联系身边可信任的人或紧急服务，并给出求助热线。安全场景下可以正常使用标点，说清楚优先。",
@@ -229,6 +232,26 @@ def build_system_prompt(scene: dict, user_text: str = "", history: list[dict] | 
         f"说话方式：{character.get('speaking_style', '')}",
         f"持续指令：{character.get('post_history_instructions', '只回应对方最后一句，不要复述设定。')}",
         "用第一人称以这个身份说话，不要自称 AI，不要解释设定。",
+    ]
+    vp = character.get("voice_profile") or {}
+    if vp:
+        lines += ["", f"你的声音（{character.get('name', '')}独有，必须按这个说）："]
+        if vp.get("signature"):
+            lines.append(f"- 你是谁：{vp['signature']}")
+        if vp.get("address"):
+            lines.append(f"- 怎么称呼对方：{vp['address']}")
+        if vp.get("presence"):
+            lines.append("- 表示你还在时，只能用这几个说法：" + " / ".join(vp["presence"]))
+        for h in (vp.get("habits") or []):
+            lines.append(f"- 说话习惯：{h}")
+        if vp.get("rhythm"):
+            lines.append(f"- 节奏：{vp['rhythm']}")
+        if vp.get("silence"):
+            lines.append(f"- 对方沉默时：{vp['silence']}")
+        if vp.get("never"):
+            lines.append("- 你这个角色绝不说：" + " / ".join(vp["never"]))
+        lines.append("- 同一句话如果别的场景的角色也说得出来，就说明你没在用自己的声音，重写。")
+    lines += [
         "",
         "每一轮按这个顺序做：",
         *(PROMPTS.get("empathy_order") or []),
@@ -249,14 +272,17 @@ def build_system_prompt(scene: dict, user_text: str = "", history: list[dict] | 
     last = next((m["content"] for m in reversed(history or []) if m.get("role") == "assistant"), "")
     if last:
         lines += [f"你上一轮说的是：{last}", "这一轮不要和它用同一个开头、同一套句式。"]
-    examples = PROMPTS.get("empathy_examples") or []
-    if examples:
-        lines += ["", "下面只学节奏和分寸，不能逐字照抄：", *[f"- {e}" for e in examples]]
+    patterns = PROMPTS.get("empathy_patterns") or []
+    if patterns:
+        lines += ["", "遇到这几种情况时怎么做（照做，不要照抄任何句子）：",
+                  *[f"- {p}" for p in patterns]]
     mes = character.get("mes_example", [])
     if mes:
-        lines += ["这个人的说话范例（只学语气和长度，不要照抄内容）：",
+        lines += [f"{character.get('name', '这个角色')}的说话范例（严禁照抄原句，只学语气和长度）：",
                   *[f"- {user} -> {assistant}" for user, assistant in mes]]
     lines += ["", *arksec_prompt_lines(), "", PROMPTS["safety_rule"]]
+    lines += ["", f"最后确认：上面出现的示例句一句都不能照抄，"
+                  f"用{character.get('name', '你')}自己的说法重说一遍。"]
     return "\n".join(lines)
 
 
