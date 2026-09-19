@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track
+from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, reply_for, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track
 
 CONVERSATIONS: dict[str, dict] = {}
 
@@ -238,9 +238,9 @@ def chat(body: ChatIn):
         })
 
     if risk_level >= 2:
-        reply = safety_reply()
+        reply = safety_reply(risk_level, body.content)
     else:
-        reply = ask_model(conversation["scene"], conversation["messages"], body.content)
+        reply = reply_for(conversation["scene"], conversation["messages"], body.content, risk_level)
 
     conversation["messages"].append({"role": "user", "content": body.content})
     conversation["messages"].append({"role": "assistant", "content": reply})

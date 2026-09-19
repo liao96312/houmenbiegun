@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 from io import StringIO
 from pathlib import Path
@@ -16,17 +17,59 @@ ROOT = Path(__file__).resolve().parent.parent
 SCENES = json.loads((ROOT / "data" / "scenes.json").read_text(encoding="utf-8"))
 BRANCHES = json.loads((ROOT / "data" / "branches.json").read_text(encoding="utf-8"))
 DEFAULT_PROMPTS = {
-    "base_system": "你是一个短时情绪陪伴者，不是心理医生，不做诊断，不开药，不替代专业治疗。",
-    "style_rules": [
-        "回复像现实里坐在旁边的人顺口接话，不要像心理咨询师、客服、旁白、角色扮演剧本。",
-        "先接住用户这句话里的具体处境，不要总结大道理，不要说“我理解你”这类空话。",
-        "默认目标是被听到，不是被解决；用户没主动问“怎么办/有什么方法”时，不给建议、不列清单、不报 CBT/ACT/DBT 等流派名。",
-        "回复 1-3 句，像微信里真人发来的短句；可以有停顿，但不要文艺腔、鸡汤、说教、励志口号。",
-        "不要用括号写动作或旁白，像真人聊天一样直接说话。",
+    "base_system": "你是深夜里坐在对方旁边的一个普通人。不是心理医生，不做诊断，不开药，不替代专业治疗；也不提 CBT / ACT / DBT 这类流派名。你只做两件事：让对方觉得刚才那句话被听进去了；必要时再给一个今天就能做完的小动作。",
+    "empathy_order": [
+        "下面四步是优先级顺序，不是清单。每轮只用其中一到两步，绝对不要把四步都说一遍。",
+        "抓词（几乎每轮都用）：从对方最后一句里挑一个具体的词（事件、数字、称呼、地点、身体感受），回复里必须用上它。",
+        "命名：说出这句话底下的那个滋味，用大白话，不用心理学术语，不用「听起来你…」。",
+        "正常化：把这个反应说成谁都会这样，而不是对方哪里出了问题。",
+        "在场：用一句话表明你还在，然后停住。不催、不评价、不要求对方回应。",
     ],
-    "safety_rule": "如果用户表达自伤、自杀、伤害他人或具体方法，立刻退出场景感，给现实安全建议并鼓励联系身边可信任的人或紧急服务。",
-    "safety_reply": "你现在的状态可能很危险。请马上联系身边可信任的人，或拨打当地紧急电话。尽量不要一个人待着。",
-    "fallback_suffix": "先不用把事情讲清楚，坐一会儿也行。",
+    "style_rules": [
+        "句末不要句号，说完就停，用空格断开，不要用「。」「！」收尾。",
+        "整条只写一行，最多两个短句，合计不超过 25 字；不要换行。",
+        "只做一到两步就够，不要把抓词、命名、正常化、在场四个都说一遍；宁可只接一句。",
+        "长度跟对方走：对方几个字，你也几个字。",
+        "先捡起对方说过的词（事件、数字、称呼、身体感受），再说别的。",
+        "把那句话底下的滋味说出来，用大白话：堵、慌、撑不住、憋着、懒得动、没劲。",
+        "把对方的反应说成正常的，不是他有问题。",
+        "用一句话表示你还在（我在这儿、我不催你、你慢慢来），然后停住。",
+        "可以只说没信息量的话（抱抱、好好睡一觉、歇会儿）。不是每句都要说到点上。",
+        "语气词留着：啊 吧 呢 哎 唉 嗯 呀 哦 嘛。",
+        "默认被听到，不是被解决。绝大多数轮不给建议；只有对方明确问「怎么办」、或同一个困境已经说了两三句且情绪稳下来时，才允许给一条小建议（详见下面的建议规则）。不列清单、不提 CBT/ACT/DBT 这类流派名。",
+        "不纠正对方：不说「你应该」「你别这样」「先别X」。",
+        "不提场景里的风、灯、雨、车、楼，除非对方先提到。",
+        "不引用名人、书、电影、歌词；不用「你值得被爱」「你很棒」这类模板夸奖。",
+        "不做总结（「所以」「总之」「重要的是」），不规划未来，不追问「接下来打算怎么办」。",
+        "连续两轮不要用同一个开头、同一套句式。",
+        "不写旁白和动作，不用括号。",
+        "不要逐字照抄示例对话。",
+    ],
+    "length_rule": "整条只写一行（不换行），最多两个短句，合计不超过 25 字，句末不用句号。",
+    "advice_policy": "建议是稀缺资源，不是默认动作，大多数轮不应该出现。允许给建议只有两种情况：① 对方明确问「怎么办」「有什么办法」「帮我想想」；② 对方连着两三句都在说同一个困境、且情绪已经稳下来。给了就只给一条，必须小到今天就能做、不花钱、不需要别人配合，而且必须排在一句共情后面，不允许开头就是建议。一次对话最多给两条。禁止多条并列、分步骤和「建议你」「你可以试试」「换个角度想」「多运动」「找个爱好」这类抽象指导。特别注意：情况 ① 发生时，不能只回一句「我也没答案」就结束，必须在共情之后附上一条具体的小动作。",
+    "advice_examples": [
+        "坏例（被追问却只给共情）：对方：帮我想想怎么办吧 -> 怎么办啊 我也没现成答案 先坐会儿",
+        "好例：对方：帮我想想怎么办吧 -> 我也没现成答案 先去洗把脸 脑子糊的时候别硬想",
+        "坏例（给成了抽象指导）：对方：你说我到底该怎么办 -> 建议你先调整心态，想想自己的优势",
+        "好例：对方：你说我到底该怎么办 -> 这会儿想不出来很正常 先去睡 明天再想",
+    ],
+    "empathy_examples": [
+        "对方：今天被裁了。 -> 被裁了啊 今天够呛",
+        "对方：我好累。 -> 歇着吧",
+        "对方：你说我到底该怎么办。 -> 这也想不出来 先去睡 明天再想",
+    ],
+    "banned_openers": ["嗯，先", "先别", "听起来", "我理解", "其实你", "你不要", "你的感受"],
+    "safety_rule": "如果对方表达自伤、自杀、伤害他人或具体方法：先用他自己的词共情一句，然后退出场景感，给出现实、可操作的安全建议，鼓励联系身边可信任的人或紧急服务，并给出求助热线。安全场景下可以正常使用标点，说清楚优先。",
+    "safety_reply": "我听见了，「{echo}」这话我当真。今晚别一个人待着，能给谁打个电话吗。",
+    "safety_reply_lv3": "我先当真：「{echo}」。现在先离开危险的地方，然后打 120；也可以打 {hotline} 找专业的人说。身边能叫到谁都叫一个，别自己扛。",
+    "safety_hotline": "400-161-9995",
+    "fallback_templates": [
+        "{echo}",
+        "嗯 {echo}",
+        "{echo} 我听着",
+        "{echo} 我在",
+        "听到了 {echo}",
+    ],
 }
 PROMPTS = DEFAULT_PROMPTS | json.loads((ROOT / "data" / "prompts.json").read_text(encoding="utf-8"))
 try:
@@ -144,8 +187,11 @@ def save_scenes(scenes: list[dict]):
 
 def save_prompts(prompts: dict):
     prompts = dict(prompts)
-    required = {"base_system", "style_rules", "safety_rule", "safety_reply", "fallback_suffix"}
+    required = {"base_system", "style_rules", "safety_rule", "safety_reply"}
     if required - set(prompts) or not isinstance(prompts.get("style_rules"), list):
+        raise ValueError("bad prompts")
+    if not all(isinstance(prompts.get(key, []), list)
+               for key in ("style_rules", "empathy_order", "banned_openers", "fallback_templates")):
         raise ValueError("bad prompts")
     PROMPTS.clear()
     PROMPTS.update(prompts)
@@ -157,44 +203,68 @@ def write_json(path: Path, data):
 
 
 def risk_level_for(text: str) -> int:
-    level3 = ["杀人", "伤害别人", "报复", "明确计划", "跳楼", "跳河", "上吊", "割腕", "服毒", "烧炭"]
-    level2 = ["自杀", "轻生", "想死", "不想活", "活不下去", "活着没意思", "死了算了", "自残", "伤害自己"]
-    if any(word in text for word in level3):
-        return 3
-    if any(word in text for word in level2):
-        return 2
+    level3 = ["杀人", "伤害别人", "报复", "明确计划", "跳楼", "跳河", "上吊", "割腕",
+              "服毒", "烧炭", "吃安眠药", "从天台", "一起死", "同归于尽"]
+    level2 = ["自杀", "轻生", "想死", "不想活", "活不下去", "活着没意思", "死了算了",
+              "自残", "伤害自己", "不想活", "不想醒过来", "睡过去就别醒", "想消失",
+              "消失掉", "别管我了", "不用管我", "我不重要", "不想治疗", "不想撑了",
+              "结束生命", "结束这一切", "撑不下去了", "没意思了"]
+    for word in level3:
+        if word in text:
+            return 3
+    for word in level2:
+        if word in text:
+            return 2
     return 0
 
 
-def build_system_prompt(scene: dict) -> str:
+def build_system_prompt(scene: dict, user_text: str = "", history: list[dict] | None = None) -> str:
     character = scene.get("character", {})
-    return "\n".join([
+    lines = [
         PROMPTS["base_system"],
         f"当前场景：{scene['description']}",
-        f"当前陪伴者：{character.get('name', '坐在旁边的人')}，{character.get('role', '')}",
-        f"陪伴者性格：{character.get('personality', scene['ai_style'])}",
-        f"角色处境：{character.get('scenario', '')}",
+        f"你是：{character.get('name', '坐在旁边的人')}，{character.get('role', '')}",
+        f"性格：{character.get('personality', scene['ai_style'])}",
+        f"你的处境：{character.get('scenario', '')}",
         f"说话方式：{character.get('speaking_style', '')}",
-        f"持续指令：{character.get('post_history_instructions', '只回复用户最后一句，不要复述设定。')}",
-        f"语气：{scene['ai_style']}。",
-        "用第一人称以这个陪伴者身份说话，但不要自称 AI，不要解释设定。",
-        "场景只当背景，不要为了贴场景硬提风、灯、椅子、雨、车、楼；除非用户提到或自然顺手。",
-        "不要写像广告文案、小说旁白、疗愈语录的句子。优先像现实中能说出口的人话。",
-        "不要用“你很棒、你很厉害、你值得被爱”这类模板式夸奖；用户否定自己时，用普通事实轻轻纠偏。",
-        "不要编陪伴者自己的经历来安慰用户，不说“我当年、我刚来时、我以前也”；优先直接回应用户最后一句。",
-        *arksec_prompt_lines(),
+        f"持续指令：{character.get('post_history_instructions', '只回应对方最后一句，不要复述设定。')}",
+        "用第一人称以这个身份说话，不要自称 AI，不要解释设定。",
+        "",
+        "每一轮按这个顺序做：",
+        *(PROMPTS.get("empathy_order") or []),
+        "",
+        "硬规则：",
         *PROMPTS["style_rules"],
-        "下面示例只学习节奏和分寸，不能逐字照抄：",
-        *[f"- {user} -> {assistant}" for user, assistant in character.get("mes_example", [])],
-        PROMPTS["safety_rule"],
-    ])
+        f"长度：{PROMPTS.get('length_rule', '')}",
+    ]
+    if PROMPTS.get("advice_policy"):
+        lines += ["", "建议规则（重要）", PROMPTS["advice_policy"]]
+        lines += [*(PROMPTS.get("advice_examples") or [])]
+    banned = PROMPTS.get("banned_openers") or []
+    if banned:
+        lines += ["", "这些开头本轮禁用，也不要连续两轮用同一种：" + " / ".join(banned)]
+    if user_text:
+        lines += ["", f"对方最后一句原话：{user_text}",
+                  "你回的第一句里必须出现对方这句话里的一个原词。"]
+    last = next((m["content"] for m in reversed(history or []) if m.get("role") == "assistant"), "")
+    if last:
+        lines += [f"你上一轮说的是：{last}", "这一轮不要和它用同一个开头、同一套句式。"]
+    examples = PROMPTS.get("empathy_examples") or []
+    if examples:
+        lines += ["", "下面只学节奏和分寸，不能逐字照抄：", *[f"- {e}" for e in examples]]
+    mes = character.get("mes_example", [])
+    if mes:
+        lines += ["这个人的说话范例（只学语气和长度，不要照抄内容）：",
+                  *[f"- {user} -> {assistant}" for user, assistant in mes]]
+    lines += ["", *arksec_prompt_lines(), "", PROMPTS["safety_rule"]]
+    return "\n".join(lines)
 
 
 def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
     api_key = os.getenv("AI_API_KEY")
     if not api_key:
         track("ai_fallback")
-        return fallback_reply(scene)
+        return fallback_reply(scene, user_text)
 
     base_url = os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
     model = os.getenv("AI_MODEL", "deepseek-chat")
@@ -202,7 +272,7 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
         {
             "model": model,
             "messages": [
-                {"role": "system", "content": build_system_prompt(scene)},
+                {"role": "system", "content": build_system_prompt(scene, user_text, history)},
                 *history[-8:],
                 {"role": "user", "content": user_text},
             ],
@@ -223,19 +293,68 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
         return clean_reply(data["choices"][0]["message"]["content"])
     except (HTTPError, URLError, KeyError, TimeoutError, json.JSONDecodeError):
         track("ai_fallback")
-        return fallback_reply(scene)
+        return fallback_reply(scene, user_text)
 
 
-def fallback_reply(scene: dict) -> str:
-    return f"{scene['fallback_prefix']}{PROMPTS['fallback_suffix']}"
+def _echo(user_text: str, limit: int = 12) -> str:
+    """从对方原话里截一段能直接接住的短句，用来做兜底回复。"""
+    text = (user_text or "").strip()
+    if not text:
+        return ""
+    first = re.split(r"[。！？!?，,；;\n\s]", text)[0].strip() or text
+    # 「我不知道该干嘛」→「不知道该干嘛」：去掉主语，更像真人复述而不是引用
+    if len(first) > 3 and first.startswith("我") and not first.startswith("我们"):
+        first = first[1:].strip() or first
+    # 纯符号输入（如「……」）：没东西可复述，返回空交给调用方处理
+    if not re.search(r"[\u4e00-\u9fff0-9]", first):
+        return ""
+    return first[:limit]
+
+
+# 对方什么都没说时用：不勉强复述，只表明在场
+PRESENCE_LINES = ["嗯 我在", "我在", "嗯 你说", "我听着"]
+
+
+def fallback_reply(scene: dict, user_text: str = "") -> str:
+    """没配 key / 请求失败时的兜底。必须复述对方原话，不能是常量。"""
+    echo = _echo(user_text)
+    if not echo:
+        return random.choice(PRESENCE_LINES)
+    pool = list(PROMPTS.get("fallback_templates") or [])
+    if scene.get("fallback_prefix"):
+        pool.append(scene["fallback_prefix"])
+    if not pool:
+        pool = ["{echo}"]
+    tpl = random.choice(pool)
+    return tpl.format(echo=echo).strip() if "{echo}" in tpl else f"{tpl} {echo}".strip()
 
 
 def clean_reply(text: str) -> str:
-    return re.sub(r"^\s*[\(（][^\)）]{1,80}[\)）]\s*", "", text.strip()).strip()
+    # 界面上一个回复就是一个气泡：多行会拼成一长串，先收成一行
+    text = " ".join(x.strip() for x in text.splitlines() if x.strip())
+    text = re.sub(r"^\s*[\(（][^\)）]{1,80}[\)）]\s*", "", text).strip()
+    # 真人语言里 80% 的话不用句号收尾，句号会立刻带出"文档感"
+    return re.sub(r"。+\s*$", "", text).strip()
 
 
-def safety_reply() -> str:
-    return PROMPTS["safety_reply"]
+def safety_reply(level: int = 2, user_text: str = "") -> str:
+    key = "safety_reply_lv3" if level >= 3 else "safety_reply"
+    template = PROMPTS.get(key) or PROMPTS["safety_reply"]
+    hotline = os.getenv("SAFETY_HOTLINE") or PROMPTS.get("safety_hotline", "400-161-9995")
+    return template.format(echo=_echo(user_text, 16), hotline=hotline)
+
+
+def reply_for(scene: dict, history: list[dict], user_text: str,
+              risk_level: int | None = None) -> str:
+    """回复决策的唯一入口：高风险走转介，其余走陪伴。
+
+    放在 core 里而不是散在 main.py / server.py，是为了只能有一处事实源：
+    两个传输层都要用，测试也要用同一个函数，否则测的就不是真实行为。
+    """
+    level = risk_level_for(user_text) if risk_level is None else risk_level
+    if level >= 2:
+        return safety_reply(level, user_text)
+    return ask_model(scene, history, user_text)
 
 
 def config_status() -> dict:

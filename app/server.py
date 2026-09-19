@@ -8,7 +8,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id, summarize, track
+from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, reply_for, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id, summarize, track
 
 
 CONVERSATIONS: dict[str, dict] = {}
@@ -104,11 +104,7 @@ class Handler(BaseHTTPRequestHandler):
                     "trigger_text": content,
                     "action_taken": "safety_reply" if risk_level >= 2 else "normal_reply",
                 })
-            reply = (
-                safety_reply()
-                if risk_level >= 2
-                else ask_model(conversation["scene"], conversation["messages"], content)
-            )
+            reply = reply_for(conversation["scene"], conversation["messages"], content, risk_level)
             conversation["messages"].extend([
                 {"role": "user", "content": content},
                 {"role": "assistant", "content": reply},
