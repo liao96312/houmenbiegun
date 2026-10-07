@@ -55,7 +55,7 @@
 ```mermaid
 flowchart LR
   Browser["H5 对话页 / 后台"] --> API["FastAPI API"]
-  API --> Auth["匿名登录 + 可选 ADMIN_TOKEN"]
+  API --> Auth["匿名登录 + 后台 ADMIN_TOKEN"]
   API --> Free["自由聊天"]
   Free --> LLM["OpenAI 兼容模型"]
   API --> Branch["分支陪伴引擎"]
@@ -149,15 +149,21 @@ AI_API_KEY=你的 OpenAI 兼容 key
 AI_BASE_URL=https://api.deepseek.com/v1
 AI_MODEL=deepseek-chat
 TTS_ENABLED=false
-ADMIN_TOKEN=部署公网前设置一个强口令
+ADMIN_TOKEN=必填，后台口令（建议 32 位以上随机 ASCII 字符串）
 ```
 
-部署到公网前务必设置 `ADMIN_TOKEN`，后台保存场景/Prompt 时会要求输入口令。
+**`ADMIN_TOKEN` 是使用后台的必填项。** 所有 `/api/admin/*` 接口（查看场景/Prompt、安全事件、反馈、会话摘要、CSV 导出，以及保存场景/Prompt）都要求请求头 `X-Admin-Token: <口令>`（也兼容 `Authorization: Bearer <口令>`）：
+
+- 未设置 `ADMIN_TOKEN`：后台接口一律返回 `503`，服务启动时会打印警告；
+- 口令缺失或错误：返回 `401`。
+
+打开 `/admin` 时页面会提示输入口令，并保存在浏览器 localStorage 中。口令请只用 ASCII 字符（HTTP 请求头不支持中文）。可以用 `python -c "import secrets; print(secrets.token_urlsafe(32))"` 生成。
 
 ## 质量检查
 
 ```powershell
 python tests_smoke.py
+python tests_admin_auth.py   # 后台鉴权回归测试，需要 pip install httpx
 ```
 
 冒烟测试覆盖场景/角色完整性、风险分级、安全回复、分支引擎与离线语料断言，**不依赖大模型或网络**，CI 默认运行。

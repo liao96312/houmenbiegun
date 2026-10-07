@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from app.core import (
@@ -56,7 +57,14 @@ def demo():
         assert opener in build_system_prompt(scene)
     assert safety_reply(2, "我不想活了").startswith("我听见了")
     assert "400-161-9995" in safety_reply(3, "我想跳楼")
-    assert admin_token_ok(None)
+    # 后台默认拒绝：没配 ADMIN_TOKEN 时谁都进不去（完整矩阵见 tests_admin_auth.py）
+    saved_token = os.environ.pop("ADMIN_TOKEN", None)
+    try:
+        assert not admin_token_ok(None)
+        assert not admin_token_ok("anything")
+    finally:
+        if saved_token is not None:
+            os.environ["ADMIN_TOKEN"] = saved_token
     assert config_status()["scene_count"] >= 8
     assert risk_level_for("今天有点烦") == 0
     assert risk_level_for("我不想活了") == 2
