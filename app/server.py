@@ -257,9 +257,31 @@ class Handler(BaseHTTPRequestHandler):
         return self.json({"detail": message}, status)
 
 
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8000
+
+
+def listen_address() -> tuple[str, int]:
+    """监听地址从环境变量 HOST / PORT 读取。
+
+    本机直接运行默认只监听 127.0.0.1；Docker 里需要 HOST=0.0.0.0，
+    否则容器外（包括端口映射）访问不到（Dockerfile / docker-compose.yml 已设置）。
+    """
+    host = (os.getenv("HOST") or "").strip() or DEFAULT_HOST
+    raw_port = (os.getenv("PORT") or "").strip()
+    try:
+        port = int(raw_port) if raw_port else DEFAULT_PORT
+    except ValueError:
+        raise SystemExit(f"PORT 必须是整数，当前为 {raw_port!r}")
+    if not 0 < port < 65536:
+        raise SystemExit(f"PORT 超出范围：{port}")
+    return host, port
+
+
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "8000"))
+    host, port = listen_address()
     warn_if_admin_token_missing()
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"http://127.0.0.1:{port}")
+    server = ThreadingHTTPServer((host, port), Handler)
+    shown = "127.0.0.1" if host in {"0.0.0.0", "::", ""} else host
+    print(f"listening on {host}:{port} -> http://{shown}:{port}", flush=True)
     server.serve_forever()

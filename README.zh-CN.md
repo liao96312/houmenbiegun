@@ -120,6 +120,8 @@ python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload
 ```
 
+监听地址：`python -m app.server` 读取环境变量 `HOST` / `PORT`，默认 `127.0.0.1:8000`，只允许本机访问；需要从其他机器访问时设 `HOST=0.0.0.0`（建议前面加 nginx）。uvicorn 用命令行参数控制，例如 `python -m uvicorn app.main:app --host 0.0.0.0 --port 8000`。
+
 打开：
 
 - 对话页：http://127.0.0.1:8000
@@ -133,6 +135,8 @@ Docker：
 Copy-Item .env.example .env
 docker compose up --build
 ```
+
+容器内服务监听 `0.0.0.0:8000`（`Dockerfile` 和 `docker-compose.yml` 已设置 `HOST=0.0.0.0`，且 compose 中的设置优先于 `.env`），宿主机通过 http://127.0.0.1:8000 访问。注意 `ports: "8000:8000"` 会把端口暴露在宿主机所有网卡上；如果只想经 nginx 反代对外，可改成 `"127.0.0.1:8000:8000"`。
 
 可选 TTS（默认关闭）：
 
@@ -164,6 +168,7 @@ ADMIN_TOKEN=必填，后台口令（建议 32 位以上随机 ASCII 字符串）
 ```powershell
 python tests_smoke.py
 python tests_admin_auth.py   # 后台鉴权回归测试，需要 pip install httpx
+python tests_server_bind.py   # HOST/PORT 监听地址测试
 ```
 
 冒烟测试覆盖场景/角色完整性、风险分级、安全回复、分支引擎与离线语料断言，**不依赖大模型或网络**，CI 默认运行。
