@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hmac
 import json
+import logging
 import os
 import random
 import re
@@ -395,9 +397,55 @@ def config_status() -> dict:
     }
 
 
+ADMIN_TOKEN_HEADER = "X-Admin-Token"
+ADMIN_PATH_PREFIX = "/api/admin/"
+
+logger = logging.getLogger("houmen.admin")
+
+
+def admin_token_configured() -> bool:
+    return bool((os.getenv("ADMIN_TOKEN") or "").strip())
+
+
+def extract_admin_token(x_admin_token: str | None = None, authorization: str | None = None) -> str | None:
+    """后台口令优先取 X-Admin-Token 请求头，其次兼容 Authorization: Bearer <token>。"""
+    if x_admin_token:
+        return x_admin_token
+    if authorization:
+        scheme, _, value = authorization.partition(" ")
+        if scheme.lower() == "bearer" and value.strip():
+            return value.strip()
+    return None
+
+
+def admin_auth_error(token: str | None) -> tuple[int, str] | None:
+    """统一的后台鉴权检查。通过返回 None，否则返回 (HTTP 状态码, 错误信息)。
+
+    默认拒绝（fail closed）：没有配置 ADMIN_TOKEN 时，所有后台接口一律不可用。
+    """
+    expected = os.getenv("ADMIN_TOKEN") or ""
+    if not expected.strip():
+        return 503, "admin disabled: ADMIN_TOKEN is not configured"
+    if not token:
+        return 401, "admin token required"
+    if not hmac.compare_digest(token.encode("utf-8"), expected.encode("utf-8")):
+        return 401, "invalid admin token"
+    return None
+
+
 def admin_token_ok(token: str | None) -> bool:
-    expected = os.getenv("ADMIN_TOKEN")
-    return not expected or token == expected
+    return admin_auth_error(token) is None
+
+
+def warn_if_admin_token_missing() -> bool:
+    """启动时调用：没配 ADMIN_TOKEN 就打一条明确的警告。返回是否已配置。"""
+    if admin_token_configured():
+        return True
+    logger.warning(
+        "ADMIN_TOKEN 未设置：所有 /api/admin/* 后台接口将返回 503，"
+        "请设置环境变量 ADMIN_TOKEN（Docker 部署写在 .env 里）为强口令后重启服务。"
+    )
+    return False
 
 
 def csv_text(rows: list[dict]) -> str:

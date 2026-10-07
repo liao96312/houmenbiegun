@@ -4,17 +4,33 @@ import os
 import time
 import uuid
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, reply_for, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track
+from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_auth_error, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, extract_admin_token, record_conversation_summary, record_feedback, record_safety_event, reply_for, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id as find_scene, summarize, track, warn_if_admin_token_missing
 
 CONVERSATIONS: dict[str, dict] = {}
 
 app = FastAPI(title="后门五分钟")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+warn_if_admin_token_missing()
+
+
+def require_admin(
+    x_admin_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+) -> None:
+    """所有 /api/admin/* 路由共用的鉴权依赖（见 app.core.admin_auth_error）。"""
+    error = admin_auth_error(extract_admin_token(x_admin_token, authorization))
+    if error:
+        status, detail = error
+        raise HTTPException(status_code=status, detail=detail)
+
+
+# 后台接口统一挂在这个 router 上，新加的 /api/admin/* 路由会自动带上鉴权。
+admin_router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
 
 
 class ConversationIn(BaseModel):
@@ -136,15 +152,13 @@ def config():
     return config_status()
 
 
-@app.get("/api/admin/scenes")
+@admin_router.get("/scenes")
 def admin_scenes():
     return SCENES
 
 
-@app.post("/api/admin/scenes")
-def update_admin_scenes(body: list[dict], x_admin_token: str | None = Header(default=None)):
-    if not admin_token_ok(x_admin_token):
-        raise HTTPException(status_code=401, detail="admin token required")
+@admin_router.post("/scenes")
+def update_admin_scenes(body: list[dict]):
     try:
         save_scenes(body)
     except ValueError as exc:
@@ -152,15 +166,13 @@ def update_admin_scenes(body: list[dict], x_admin_token: str | None = Header(def
     return {"ok": True}
 
 
-@app.get("/api/admin/prompts")
+@admin_router.get("/prompts")
 def admin_prompts():
     return PROMPTS
 
 
-@app.post("/api/admin/prompts")
-def update_admin_prompts(body: dict, x_admin_token: str | None = Header(default=None)):
-    if not admin_token_ok(x_admin_token):
-        raise HTTPException(status_code=401, detail="admin token required")
+@admin_router.post("/prompts")
+def update_admin_prompts(body: dict):
     try:
         save_prompts(body)
     except ValueError as exc:
@@ -168,32 +180,32 @@ def update_admin_prompts(body: dict, x_admin_token: str | None = Header(default=
     return {"ok": True}
 
 
-@app.get("/api/admin/safety-events")
+@admin_router.get("/safety-events")
 def admin_safety_events():
     return SAFETY_EVENTS
 
 
-@app.get("/api/admin/feedback")
+@admin_router.get("/feedback")
 def admin_feedback():
     return FEEDBACK
 
 
-@app.get("/api/admin/conversations")
+@admin_router.get("/conversations")
 def admin_conversations():
     return CONVERSATION_SUMMARIES
 
 
-@app.get("/api/admin/export/safety-events.csv")
+@admin_router.get("/export/safety-events.csv")
 def export_safety_events():
     return PlainTextResponse(csv_text(SAFETY_EVENTS), media_type="text/csv; charset=utf-8")
 
 
-@app.get("/api/admin/export/feedback.csv")
+@admin_router.get("/export/feedback.csv")
 def export_feedback():
     return PlainTextResponse(csv_text(FEEDBACK), media_type="text/csv; charset=utf-8")
 
 
-@app.get("/api/admin/export/conversations.csv")
+@admin_router.get("/export/conversations.csv")
 def export_conversations():
     return PlainTextResponse(csv_text(CONVERSATION_SUMMARIES), media_type="text/csv; charset=utf-8")
 
@@ -282,6 +294,9 @@ def feedback(body: FeedbackIn):
         raise HTTPException(status_code=400, detail="bad feedback type")
     record_feedback(body.model_dump())
     return {"ok": True}
+
+
+app.include_router(admin_router)
 
 
 def scene_by_id(scene_id: str) -> dict:
