@@ -55,7 +55,7 @@ Most emotional-support products either lean entirely on a large model (unstable 
 ```mermaid
 flowchart LR
   Browser["H5 chat page / admin"] --> API["FastAPI API"]
-  API --> Auth["Anonymous login + optional ADMIN_TOKEN"]
+  API --> Auth["Anonymous login + admin ADMIN_TOKEN"]
   API --> Free["Free chat"]
   Free --> LLM["OpenAI-compatible model"]
   API --> Branch["Branch companion engine"]
@@ -153,15 +153,21 @@ AI_API_KEY=your OpenAI-compatible key
 AI_BASE_URL=https://api.deepseek.com/v1
 AI_MODEL=deepseek-chat
 TTS_ENABLED=false
-ADMIN_TOKEN=set a strong token before public deployment
+ADMIN_TOKEN=required, admin token (32+ random ASCII chars recommended)
 ```
 
-Set `ADMIN_TOKEN` before any public deployment; the admin requires it when saving scenes/prompts.
+**`ADMIN_TOKEN` is required for any admin access.** Every `/api/admin/*` endpoint (scenes/prompts, safety events, feedback, conversation summaries, CSV exports, and saving scenes/prompts) requires the header `X-Admin-Token: <token>` (`Authorization: Bearer <token>` is also accepted):
+
+- `ADMIN_TOKEN` unset: admin endpoints return `503` and a warning is logged at startup;
+- missing or wrong token: `401`.
+
+The `/admin` page prompts for the token and keeps it in browser localStorage. Use ASCII only (HTTP headers cannot carry non-ASCII). Generate one with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
 ## Quality Checks
 
 ```powershell
 python tests_smoke.py
+python tests_admin_auth.py   # admin auth regression tests; needs pip install httpx
 python tests_server_bind.py   # HOST/PORT listen-address tests
 ```
 

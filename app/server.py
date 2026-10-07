@@ -8,7 +8,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, record_conversation_summary, record_feedback, record_safety_event, reply_for, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id, summarize, track
+from app.core import ADMIN_PATH_PREFIX, ADMIN_TOKEN_HEADER, ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, admin_auth_error, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, extract_admin_token, record_conversation_summary, record_feedback, record_safety_event, reply_for, risk_level_for, safety_reply, save_prompts, save_scenes, scene_by_id, summarize, track, warn_if_admin_token_missing
 
 
 CONVERSATIONS: dict[str, dict] = {}
@@ -17,6 +17,8 @@ CONVERSATIONS: dict[str, dict] = {}
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith(ADMIN_PATH_PREFIX) and not self.admin_authorized():
+            return
         if path == "/health":
             return self.json({"ok": True, "service": "houmenwufenzhong"})
         if path == "/":
@@ -69,6 +71,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if path.startswith(ADMIN_PATH_PREFIX) and not self.admin_authorized():
+            return
         body = self.body()
         if path == "/api/conversations":
             scene = scene_by_id(body.get("scene_id", ""))
@@ -175,8 +179,6 @@ class Handler(BaseHTTPRequestHandler):
             })
 
         if path == "/api/admin/scenes":
-            if not admin_token_ok(self.headers.get("X-Admin-Token")):
-                return self.error(401, "admin token required")
             try:
                 save_scenes(body)
             except (TypeError, ValueError):
@@ -184,8 +186,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"ok": True})
 
         if path == "/api/admin/prompts":
-            if not admin_token_ok(self.headers.get("X-Admin-Token")):
-                return self.error(401, "admin token required")
             try:
                 save_prompts(body)
             except (TypeError, ValueError):
@@ -208,6 +208,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"ok": True})
 
         return self.error(404, "not found")
+
+    def admin_authorized(self) -> bool:
+        """所有 /api/admin/* 请求共用的鉴权；失败时已写好错误响应并返回 False。"""
+        token = extract_admin_token(self.headers.get(ADMIN_TOKEN_HEADER), self.headers.get("Authorization"))
+        error = admin_auth_error(token)
+        if error:
+            status, detail = error
+            self.error(status, detail)
+            return False
+        return True
 
     def body(self):
         size = int(self.headers.get("Content-Length", "0"))
@@ -270,6 +280,7 @@ def listen_address() -> tuple[str, int]:
 
 if __name__ == "__main__":
     host, port = listen_address()
+    warn_if_admin_token_missing()
     server = ThreadingHTTPServer((host, port), Handler)
     shown = "127.0.0.1" if host in {"0.0.0.0", "::", ""} else host
     print(f"listening on {host}:{port} -> http://{shown}:{port}", flush=True)
