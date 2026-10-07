@@ -1,0 +1,15 @@
+.git/
+.github/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.log
+.env
+.env.*
+!.env.example
+data/app.db
+data/*.db
+data/external/arksec_raw/
+server.err.log
+server.out.log

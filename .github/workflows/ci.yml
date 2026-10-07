@@ -24,3 +24,15 @@ jobs:
         run: python tests_tone_eval.py
       - name: Run server bind tests
         run: python tests_server_bind.py
+      - name: Check writing library
+        run: python scripts/check_writing.py
+      - name: Check safety cases
+        run: python scripts/check_safety_cases.py
+      - name: Check model contract
+        run: python scripts/check_model_contract.py
+      - name: Check media assets
+        run: python scripts/check_media.py
+      - name: Check request limits
+        run: python scripts/check_limits.py
+      - name: Check API contract
+        run: python scripts/check_api_contract.py

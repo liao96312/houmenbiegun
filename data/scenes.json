@@ -4,10 +4,11 @@
     "display_name": "超市后门",
     "description": "昏黄后门灯，墙边有一点风，远处货车灯慢慢过去。像刚把一天放下，暂时不想再讲道理的地方。",
     "visual_type": "static_image",
-    "poster_url": "/static/posters/supermarket_backdoor.svg",
+    "poster_url": "/static/posters/supermarket_backdoor.jpg",
     "video_url": "",
     "video_low_url": "",
     "audio_url": "",
+    "resource_status": {"poster": "generated_static_jpeg", "video": "not_provided", "audio": "browser_generated_noise"},
     "opening_line": "站会儿也行 不用说话",
     "closing_line": "那就到这儿 回去慢点",
     "ai_style": "话少，真实，不说教，像一个也刚下班的人",
@@ -51,7 +52,7 @@
           "我也没招儿 回去睡一觉 明天再说"
         ]
       ],
-      "avatar_url": "/static/characters/tayama_smoking.png",
+      "avatar_url": "/static/characters/thumbs/tayama_smoking.webp",
       "image_prompt": "Adult anime-inspired woman named Miss Tayama, late-night supermarket back door, dim yellow service light, concrete wall, delivery crates, faint smoke, cute subtly sexy teasing smile, casual work jacket, holding an unlit cigarette, grounded visual novel style, no nudity, no school uniform, no text.",
       "voice_profile": {
         "address": "直接叫「你」，偶尔带个「哎」",
@@ -81,10 +82,11 @@
     "display_name": "深夜便利店",
     "description": "凌晨的便利店还亮着灯，门口有塑料椅，冰柜有轻微嗡嗡声。像夜里还能借你一口气的地方。",
     "visual_type": "static_image",
-    "poster_url": "/static/posters/convenience_store_night.svg",
+    "poster_url": "/static/posters/convenience_store_night.jpg",
     "video_url": "",
     "video_low_url": "",
     "audio_url": "",
+    "resource_status": {"poster": "generated_static_jpeg", "video": "not_provided", "audio": "browser_generated_noise"},
     "opening_line": "进来坐会儿吧",
     "closing_line": "坐够了再走 慢点",
     "ai_style": "有人情味，保持距离，不像恋人，不像客服",
@@ -128,7 +130,7 @@
           "这会儿想不出来 先喝口热的"
         ]
       ],
-      "avatar_url": "/static/characters/xiaolin_clerk.png",
+      "avatar_url": "/static/characters/thumbs/xiaolin_clerk.webp",
       "image_prompt": "Adult anime-style night convenience store clerk, cool white store light, plastic chair by glass door, gentle teasing smile, simple uniform jacket, warm but distant, visual novel character portrait, no logos, no text, no nudity.",
       "voice_profile": {
         "address": "直接叫「你」",
@@ -158,10 +160,11 @@
     "display_name": "雨夜公交站",
     "description": "公交站棚下面有雨声，路灯照着地面积水，远处车灯偶尔晃过。雨会一直下，但你可以先不赶。",
     "visual_type": "static_image",
-    "poster_url": "/static/posters/rain_bus_stop.svg",
+    "poster_url": "/static/posters/rain_bus_stop.jpg",
     "video_url": "",
     "video_low_url": "",
     "audio_url": "",
+    "resource_status": {"poster": "generated_static_jpeg", "video": "not_provided", "audio": "browser_generated_noise"},
     "opening_line": "车还没来 避会儿雨",
     "closing_line": "那就这样 路滑慢点",
     "ai_style": "慢，不催用户表达，允许沉默",
@@ -205,7 +208,7 @@
           "想不出来 先站会儿 车来了再说"
         ]
       ],
-      "avatar_url": "/static/characters/linyu_bus_stop.png",
+      "avatar_url": "/static/characters/thumbs/linyu_bus_stop.webp",
       "image_prompt": "Adult anime woman waiting at rainy bus stop at night, umbrella by her feet, wet pavement reflections, calm quiet eyes, slow gentle presence, cinematic visual novel portrait, no text, no watermark.",
       "voice_profile": {
         "address": "几乎不称呼，直接说话",
@@ -234,10 +237,11 @@
     "display_name": "车里坐一会儿",
     "description": "车窗上有雨滴，仪表盘有一点微光，外面的路灯模糊成一片。像把门关上以后，外面先停一停的地方。",
     "visual_type": "static_image",
-    "poster_url": "/static/posters/car_rain.svg",
+    "poster_url": "/static/posters/car_rain.jpg",
     "video_url": "",
     "video_low_url": "",
     "audio_url": "",
+    "resource_status": {"poster": "generated_static_jpeg", "video": "not_provided", "audio": "browser_generated_noise"},
     "opening_line": "车门关上了 坐会儿",
     "closing_line": "想走再走 不催你",
     "ai_style": "安全，低声，不打扰",
@@ -281,7 +285,7 @@
           "我也没主意 先靠着坐会儿"
         ]
       ],
-      "avatar_url": "/static/characters/zhoucheng_car.png",
+      "avatar_url": "/static/characters/thumbs/zhoucheng_car.webp",
       "image_prompt": "Adult anime woman sitting in passenger seat of parked car at rainy night, dashboard glow, raindrops on window, calm reliable expression, soft low-light visual novel portrait, no text, no nudity.",
       "voice_profile": {
         "address": "直接叫「你」",
@@ -311,10 +315,11 @@
     "display_name": "末班地铁",
     "description": "车厢轻轻晃着，广告灯还亮，空座位比白天多很多。人少的时候，脑子也能稍微慢一点。",
     "visual_type": "static_image",
-    "poster_url": "/static/posters/last_subway.svg",
+    "poster_url": "/static/posters/last_subway.jpg",
     "video_url": "",
     "video_low_url": "",
     "audio_url": "",
+    "resource_status": {"poster": "generated_static_jpeg", "video": "not_provided", "audio": "browser_generated_noise"},
     "opening_line": "这边没人 坐吧",
     "closing_line": "到站了 少想点",
     "ai_style": "低声，放空，不追问，不催人振作",
@@ -358,7 +363,7 @@
           "我也没招 先闭会儿眼 到站再说"
         ]
       ],
-      "avatar_url": "/static/characters/aki_subway.png",
+      "avatar_url": "/static/characters/thumbs/aki_subway.webp",
       "image_prompt": "Adult anime woman on last subway train at night, empty seats, soft ad lights, tired relaxed expression, urban loneliness, visual novel portrait, no text, no watermark.",
       "voice_profile": {
         "address": "直接叫「你」，不加任何亲近词",
@@ -388,10 +393,11 @@
     "display_name": "公司楼下",
     "description": "写字楼的灯还没全灭，门口台阶有夜风，保安亭亮着小灯。下班了，但人还没完全松开。",
     "visual_type": "static_image",
-    "poster_url": "/static/posters/office_downstairs.svg",
+    "poster_url": "/static/posters/office_downstairs.jpg",
     "video_url": "",
     "video_low_url": "",
     "audio_url": "",
+    "resource_status": {"poster": "generated_static_jpeg", "video": "not_provided", "audio": "browser_generated_noise"},
     "opening_line": "还没走啊 缓一下",
     "closing_line": "回去吃口热的",
     "ai_style": "像刚下班的人，理解疲惫，不讲效率建议",
@@ -435,7 +441,7 @@
           "这会儿想不出 先吃口热的 明天再琢磨"
         ]
       ],
-      "avatar_url": "/static/characters/xujie_office.png",
+      "avatar_url": "/static/characters/thumbs/xujie_office.webp",
       "image_prompt": "Adult anime woman near office building security booth at night, holding warm cup, city office lights, straightforward caring expression, grounded visual novel portrait, no text.",
       "voice_profile": {
         "address": "直接叫「你」，偶尔一声「嗐」",
@@ -465,10 +471,11 @@
     "display_name": "没人的天台",
     "description": "城市远处有红色航空灯，风比楼下大一点，四周很空。这里不适合逞强，先往里站一点。",
     "visual_type": "static_image",
-    "poster_url": "/static/posters/empty_rooftop.svg",
+    "poster_url": "/static/posters/empty_rooftop.jpg",
     "video_url": "",
     "video_low_url": "",
     "audio_url": "",
+    "resource_status": {"poster": "generated_static_jpeg", "video": "not_provided", "audio": "browser_generated_noise"},
     "opening_line": "往里站一点 风大",
     "closing_line": "往里站 今天到这儿",
     "ai_style": "安静，现实，安全感优先，不危险化浪漫化",
@@ -512,7 +519,7 @@
           "今天不定 明天白天再想 先往里站"
         ]
       ],
-      "avatar_url": "/static/characters/lanjie_rooftop.png",
+      "avatar_url": "/static/characters/thumbs/lanjie_rooftop.webp",
       "image_prompt": "Adult anime woman on city rooftop at night, red aviation lights far away, wind moving coat, calm protective expression, standing safely away from edge, no dangerous pose, visual novel portrait.",
       "voice_profile": {
         "address": "直接叫「你」",
@@ -540,10 +547,11 @@
     "display_name": "小区长椅",
     "description": "路灯照着树影，楼上有零星灯光，远处有人慢慢走过去。晚一点回家也没关系。",
     "visual_type": "static_image",
-    "poster_url": "/static/posters/community_bench.svg",
+    "poster_url": "/static/posters/community_bench.jpg",
     "video_url": "",
     "video_low_url": "",
     "audio_url": "",
+    "resource_status": {"poster": "generated_static_jpeg", "video": "not_provided", "audio": "browser_generated_noise"},
     "opening_line": "不上楼也行 坐会儿",
     "closing_line": "慢慢上去 不着急",
     "ai_style": "日常，轻，像小区里偶遇的熟人",
@@ -587,7 +595,7 @@
           "我哪有主意啊 先回去睡 明天再说"
         ]
       ],
-      "avatar_url": "/static/characters/chenyi_bench.png",
+      "avatar_url": "/static/characters/thumbs/chenyi_bench.webp",
       "image_prompt": "Adult anime neighbor woman sitting near community bench at night, warm streetlight, tree shadows, ordinary residential mood, caring everyday expression, visual novel portrait, no text.",
       "voice_profile": {
         "address": "直接叫「你」，偶尔一声「哎」",

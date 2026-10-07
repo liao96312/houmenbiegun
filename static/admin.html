@@ -180,13 +180,17 @@
       document.querySelector("#conversations").textContent = JSON.stringify(conversations, null, 2);
       document.querySelector("#feedback").textContent = JSON.stringify(feedback, null, 2);
       document.querySelector("#scenesJson").value = JSON.stringify(scenes, null, 2);
-      document.querySelector("#scenes").innerHTML = scenes.map(scene => `
-        <tr>
-          <td>${scene.display_name}</td>
-          <td>${scene.description}</td>
-          <td>${scene.visual_type}<br>${scene.video_url ? "video" : "poster"} / ${scene.audio_url ? "audio" : "generated noise"}</td>
-        </tr>
-      `).join("");
+      document.querySelector("#scenes").replaceChildren(...scenes.map(scene => {
+        const row = document.createElement("tr");
+        const name = document.createElement("td");
+        name.textContent = scene.display_name || "未命名场景";
+        const description = document.createElement("td");
+        description.textContent = scene.description || "";
+        const assets = document.createElement("td");
+        assets.textContent = `${scene.visual_type || "unknown"} / ${scene.video_url ? "video" : "poster"} / ${scene.audio_url ? "audio" : "generated noise"}`;
+        row.append(name, description, assets);
+        return row;
+      }));
     }
     document.addEventListener("click", async event => {
       const exportLink = event.target.closest("a[data-export]");
