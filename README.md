@@ -120,6 +120,8 @@ python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload
 ```
 
+Listen address: `python -m app.server` reads `HOST` / `PORT` from the environment and defaults to `127.0.0.1:8000` (local access only); set `HOST=0.0.0.0` to accept connections from other machines (preferably behind nginx). For uvicorn use CLI flags, e.g. `python -m uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+
 Open:
 
 - Chat page: http://127.0.0.1:8000
@@ -133,6 +135,8 @@ Docker:
 Copy-Item .env.example .env
 docker compose up --build
 ```
+
+Inside the container the server listens on `0.0.0.0:8000` (`HOST=0.0.0.0` is set in both `Dockerfile` and `docker-compose.yml`, and the compose value takes precedence over `.env`); reach it from the host at http://127.0.0.1:8000. Note that `ports: "8000:8000"` publishes the port on all host interfaces; use `"127.0.0.1:8000:8000"` if it should only be reachable through an nginx reverse proxy.
 
 Optional TTS (off by default):
 
@@ -158,6 +162,7 @@ Set `ADMIN_TOKEN` before any public deployment; the admin requires it when savin
 
 ```powershell
 python tests_smoke.py
+python tests_server_bind.py   # HOST/PORT listen-address tests
 ```
 
 The smoke test covers scene/character integrity, risk grading, safety replies, the branch engine, and offline-corpus assertions. It **does not depend on a large model or the network**, and runs by default in CI.

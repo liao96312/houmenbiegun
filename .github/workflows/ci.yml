@@ -20,3 +20,5 @@ jobs:
         run: python tests_smoke.py
       - name: Run tone evaluation
         run: python tests_tone_eval.py
+      - name: Run server bind tests
+        run: python tests_server_bind.py

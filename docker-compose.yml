@@ -3,6 +3,10 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      # 放在 environment 里，优先级高于 .env，避免 .env 里的 HOST/PORT 把容器改回只监听 127.0.0.1
+      HOST: 0.0.0.0
+      PORT: "8000"
     ports:
       - "8000:8000"
     volumes:
