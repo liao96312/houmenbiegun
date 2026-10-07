@@ -56,7 +56,9 @@ def check_client(client, base: str | None = None) -> list[str]:
 
 
 def main() -> int:
-    os.environ.pop("ADMIN_TOKEN", None)
+    # 后台默认拒绝：未配置 ADMIN_TOKEN 时返回 503（见 tests_admin_auth.py）；
+    # 这里配置一个测试口令，校验“不带口令 -> 401”这条两端共用的契约。
+    os.environ["ADMIN_TOKEN"] = "contract-test-token"
     errors = check_client(TestClient(app))
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)

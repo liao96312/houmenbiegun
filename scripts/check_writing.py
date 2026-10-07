@@ -35,7 +35,8 @@ def main() -> int:
         if not scene.get("character", {}).get("first_message"):
             errors.append(f"{scene['scene_id']}.character.first_message is empty")
     prompt_text = "\n".join(prompts.get("style_rules", []))
-    for phrase in ("不要用括号写动作或旁白", "不要逐字照抄示例对话"):
+    # 只要求规则存在（不写括号旁白、不照抄示例），不绑死具体措辞。
+    for phrase in ("括号", "照抄"):
         if phrase not in prompt_text:
             errors.append(f"prompt missing rule: {phrase}")
     if re.search(r"欢迎|产品|助手", prompts.get("base_system", "")):

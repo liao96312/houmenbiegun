@@ -22,8 +22,8 @@ def main() -> int:
         status = scene.get("resource_status", {})
         if status != {"poster": "generated_static_jpeg", "video": "not_provided", "audio": "browser_generated_noise"}:
             errors.append(f"{scene['scene_id']}: resource_status is incomplete or ambiguous")
-        poster = ROOT / scene["poster_url"].lstrip("/").replace("/", "\\")
-        avatar = ROOT / scene["character"]["avatar_url"].lstrip("/").replace("/", "\\")
+        poster = ROOT / scene["poster_url"].lstrip("/")
+        avatar = ROOT / scene["character"]["avatar_url"].lstrip("/")
         if not poster.exists() or not is_jpeg(poster):
             errors.append(f"{scene['scene_id']}: poster is missing or not JPEG")
         elif poster.stat().st_size > 600_000:
