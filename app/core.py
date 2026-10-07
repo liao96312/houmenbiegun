@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hmac
 import json
+import logging
 import os
+import random
 import re
 import threading
 import time
@@ -24,18 +27,63 @@ _RATE_LOCK = threading.Lock()
 SCENES = json.loads((ROOT / "data" / "scenes.json").read_text(encoding="utf-8"))
 BRANCHES = json.loads((ROOT / "data" / "branches.json").read_text(encoding="utf-8"))
 DEFAULT_PROMPTS = {
-    "base_system": "你是一个短时情绪陪伴者，不是心理医生，不做诊断，不开药，不替代专业治疗。",
-    "style_rules": [
-        "回复像现实里坐在旁边的人顺口接话，不要像心理咨询师、客服、旁白、角色扮演剧本。",
-        "先接住用户这句话里的具体处境，不要总结大道理，不要说“我理解你”这类空话。",
-        "默认目标是被听到，不是被解决；用户没主动问“怎么办/有什么方法”时，不给建议、不列清单、不报 CBT/ACT/DBT 等流派名。",
-        "回复 1-3 句，像微信里真人发来的短句；可以有停顿，但不要文艺腔、鸡汤、说教、励志口号。",
-        "不要用括号写动作或旁白，像真人聊天一样直接说话。",
+    "base_system": "你是深夜里坐在对方旁边的一个普通人。不是心理医生，不做诊断，不开药，不替代专业治疗；也不提 CBT / ACT / DBT 这类流派名。你只做两件事：让对方觉得刚才那句话被听进去了；必要时再给一个今天就能做完的小动作。",
+    "empathy_order": [
+        "下面四步是优先级顺序，不是清单。每轮只用其中一到两步，绝对不要把四步都说一遍。",
+        "抓词（几乎每轮都用）：从对方最后一句里挑一个具体的词（事件、数字、称呼、地点、身体感受），回复里必须用上它。",
+        "命名：说出这句话底下的那个滋味，用大白话，不用心理学术语，不用「听起来你…」。",
+        "正常化：把这个反应说成谁都会这样，而不是对方哪里出了问题。",
+        "在场：用一句话表明你还在，然后停住。不催、不评价、不要求对方回应。",
     ],
-    "safety_rule": "如果用户表达自伤、自杀、伤害他人或具体方法，立刻退出场景感，给现实安全建议并鼓励联系身边可信任的人或紧急服务。",
-    "safety_reply": "先停一下。你现在可能处在危险里，请马上联系身边可信任的人。",
+    "style_rules": [
+        "句末不要句号，说完就停，用空格断开，不要用「。」「！」收尾。",
+        "整条只写一行，最多两个短句，合计不超过 25 字；不要换行。",
+        "只做一到两步就够，不要把抓词、命名、正常化、在场四个都说一遍；宁可只接一句。",
+        "长度跟对方走：对方几个字，你也几个字。",
+        "先捡起对方说过的词（事件、数字、称呼、身体感受），再说别的。",
+        "把那句话底下的滋味说出来，用大白话：堵、慌、撑不住、憋着、懒得动、没劲。",
+        "把对方的反应说成正常的，不是他有问题。",
+        "用一句话表示你还在，然后停住。在场说法必须用 voice_profile 里给你的那几个，不要用别的角色的说法。",
+        "可以只说没信息量的话（抱抱、好好睡一觉、歇会儿）。不是每句都要说到点上。",
+        "语气词留着：啊 吧 呢 哎 唉 嗯 呀 哦 嘛。",
+        "默认被听到，不是被解决。绝大多数轮不给建议；只有对方明确问「怎么办」、或同一个困境已经说了两三句且情绪稳下来时，才允许给一条小建议（详见下面的建议规则）。不列清单、不提 CBT/ACT/DBT 这类流派名。",
+        "不纠正对方：不说「你应该」「你别这样」「先别X」。",
+        "不提场景里的风、灯、雨、车、楼，除非对方先提到。",
+        "不引用名人、书、电影、歌词；不用「你值得被爱」「你很棒」这类模板夸奖。",
+        "不做总结（「所以」「总之」「重要的是」），不规划未来，不追问「接下来打算怎么办」。",
+        "连续两轮不要用同一个开头、同一套句式。",
+        "你是这个角色，不是任意一个温柔的 AI：用词、口头习惯、在场说法都要跟其他场景的角色区分开，不要用别角色的常用句。",
+        "不写旁白和动作，不用括号。",
+        "严禁逐字照抄上面出现的任何示例句；示例只用来感受长度和分寸，说法必须换成你这个角色自己的。",
+    ],
+    "length_rule": "整条只写一行（不换行），最多两个短句，合计不超过 25 字，句末不用句号。",
+    "advice_policy": "建议是稀缺资源，不是默认动作，大多数轮不应该出现。允许给建议只有两种情况：① 对方明确问「怎么办」「有什么办法」「帮我想想」；② 对方连着两三句都在说同一个困境、且情绪已经稳下来。给了就只给一条，必须小到今天就能做、不花钱、不需要别人配合，而且必须排在一句共情后面，不允许开头就是建议。一次对话最多给两条。禁止多条并列、分步骤和「建议你」「你可以试试」「换个角度想」「多运动」「找个爱好」这类抽象指导。特别注意：情况 ① 发生时，不能只回一句「我也没答案」就结束，必须在共情之后附上一条具体的小动作。",
+    "advice_examples": [
+        "坏例（被追问却只给共情）：对方：帮我想想怎么办吧 -> 怎么办啊 我也没现成答案 先坐会儿",
+        "好例：对方：帮我想想怎么办吧 -> 我也没现成答案 先去洗把脸 脑子糊的时候别硬想",
+        "坏例（给成了抽象指导）：对方：你说我到底该怎么办 -> 建议你先调整心态，想想自己的优势",
+        "好例：对方：你说我到底该怎么办 -> 这会儿想不出来很正常 先去睡 明天再想",
+    ],
+    "empathy_patterns": [
+        "对方给了一个具体数字或时间（34、上周、三个月）时：把那个词重复一遍，再承认它确实卡。不要用统一的感叹句，每个角色说出来的都不一样。",
+        "对方只发两三个字（好累、烦）时：只回一句，不许补第二句。",
+        "对方否定自己（我没用、我不行）时：先说不，再把原因推回当天的处境，不要顺着否定。",
+        "对方给的是丧失或重大事件（被裁、亲人走了）时：先只承认，不给方法、不马上安慰。",
+        "对方情绪回稳或道谢时：不做总结、不追问以后，只说你还在，而且用你自己角色独有的说法。",
+    ],
+    "banned_openers": ["嗯，先", "先别", "听起来", "我理解", "其实你", "你不要", "你的感受"],
+    "safety_rule": "如果对方表达自伤、自杀、伤害他人或具体方法：先用他自己的词共情一句，然后退出场景感，给出现实、可操作的安全建议，鼓励联系身边可信任的人或紧急服务，并给出求助热线。安全场景下可以正常使用标点，说清楚优先。",
+    "safety_reply": "我听见了，「{echo}」这话我当真。今晚别一个人待着，能给谁打个电话吗。",
+    "safety_reply_lv3": "我先当真：「{echo}」。现在先离开危险的地方，然后打 120；也可以打 {hotline} 找专业的人说。身边能叫到谁都叫一个，别自己扛。",
+    "safety_hotline": "400-161-9995",
+    "fallback_templates": [
+        "{echo}",
+        "嗯 {echo}",
+        "{echo} 我听着",
+        "{echo} 我在",
+        "听到了 {echo}",
+    ],
     "safety_resources": "中国大陆：心理援助热线 12356；如有立即危险，请拨打 110 或 120。",
-    "fallback_suffix": "先不用把事情讲清楚，坐一会儿也行。",
 }
 PROMPTS = DEFAULT_PROMPTS | json.loads((ROOT / "data" / "prompts.json").read_text(encoding="utf-8"))
 try:
@@ -236,8 +284,11 @@ def save_scenes(scenes: list[dict]):
 
 def save_prompts(prompts: dict):
     prompts = dict(prompts)
-    required = {"base_system", "style_rules", "safety_rule", "safety_reply", "fallback_suffix"}
+    required = {"base_system", "style_rules", "safety_rule", "safety_reply"}
     if required - set(prompts) or not isinstance(prompts.get("style_rules"), list):
+        raise ValueError("bad prompts")
+    if not all(isinstance(prompts.get(key, []), list)
+               for key in ("style_rules", "empathy_order", "banned_openers", "fallback_templates")):
         raise ValueError("bad prompts")
     PROMPTS.clear()
     PROMPTS.update(prompts)
@@ -271,40 +322,85 @@ def risk_level_for(text: str) -> int:
         r"(?:我|自己).{0,8}(?:自杀|轻生|想死|不想活|活不下去|活着没意思|死了算了|自残|伤害自己|结束一切)",
         r"(?:想死|不想活|活不下去|活着没意思|死了算了|自残|伤害自己|结束一切)",
     ]
-    if any(re.search(pattern, normalized) for pattern in level3_patterns):
+    # 真人语料里的高风险说法（关键词，命中即升级），与上面的句式规则取并集。
+    level3_keywords = ["杀人", "伤害别人", "报复", "明确计划", "跳楼", "跳河", "上吊", "割腕",
+                       "服毒", "烧炭", "吃安眠药", "从天台", "一起死", "同归于尽"]
+    level2_keywords = ["自杀", "轻生", "想死", "不想活", "活不下去", "活着没意思", "死了算了",
+                       "自残", "伤害自己", "不想醒过来", "睡过去就别醒", "想消失",
+                       "消失掉", "别管我了", "不用管我", "我不重要", "不想治疗", "不想撑了",
+                       "结束生命", "结束这一切", "撑不下去了", "没意思了"]
+    if any(re.search(pattern, normalized) for pattern in level3_patterns) or any(w in normalized for w in level3_keywords):
         return 3
-    if any(re.search(pattern, normalized) for pattern in level2_patterns):
+    if any(re.search(pattern, normalized) for pattern in level2_patterns) or any(w in normalized for w in level2_keywords):
         return 2
     if re.search(r"(?:消失|撑不住|没用|失败|不想回家|不想面对|没有意义)", normalized):
         return 1
     return 0
 
 
-def build_system_prompt(scene: dict, user_text: str = "") -> str:
+def build_system_prompt(scene: dict, user_text: str = "", history: list[dict] | None = None) -> str:
     character = scene.get("character", {})
-    return "\n".join([
+    lines = [
         PROMPTS["base_system"],
         f"当前场景：{scene['description']}",
-        f"当前陪伴者：{character.get('name', '坐在旁边的人')}，{character.get('role', '')}",
-        f"陪伴者性格：{character.get('personality', scene['ai_style'])}",
-        f"角色处境：{character.get('scenario', '')}",
+        f"你是：{character.get('name', '坐在旁边的人')}，{character.get('role', '')}",
+        f"性格：{character.get('personality', scene['ai_style'])}",
+        f"你的处境：{character.get('scenario', '')}",
         f"说话方式：{character.get('speaking_style', '')}",
-        f"持续指令：{character.get('post_history_instructions', '只回复用户最后一句，不要复述设定。')}",
-        f"语气：{scene['ai_style']}。",
-        "用第一人称以这个陪伴者身份说话，但不要自称 AI，不要解释设定。",
-        "场景只当背景，不要为了贴场景硬提风、灯、椅子、雨、车、楼；除非用户提到或自然顺手。",
-        "不要写像广告文案、小说旁白、疗愈语录的句子。优先像现实中能说出口的人话。",
-        "不要用“你很棒、你很厉害、你值得被爱”这类模板式夸奖；用户否定自己时，用普通事实轻轻纠偏。",
-        "不要编陪伴者自己的经历来安慰用户，不说“我当年、我刚来时、我以前也”；优先直接回应用户最后一句。",
-        *[f"开场规则：{rule}" for rule in PROMPTS.get("first_reply_rules", [])],
-        *[f"收尾规则：{rule}" for rule in PROMPTS.get("closing_rules", [])],
-        *arksec_prompt_lines(),
-        *writing_prompt_lines(user_text),
+        f"持续指令：{character.get('post_history_instructions', '只回应对方最后一句，不要复述设定。')}",
+        "用第一人称以这个身份说话，不要自称 AI，不要解释设定。",
+    ]
+    vp = character.get("voice_profile") or {}
+    if vp:
+        lines += ["", f"你的声音（{character.get('name', '')}独有，必须按这个说）："]
+        if vp.get("signature"):
+            lines.append(f"- 你是谁：{vp['signature']}")
+        if vp.get("address"):
+            lines.append(f"- 怎么称呼对方：{vp['address']}")
+        if vp.get("presence"):
+            lines.append("- 表示你还在时，只能用这几个说法：" + " / ".join(vp["presence"]))
+        for h in (vp.get("habits") or []):
+            lines.append(f"- 说话习惯：{h}")
+        if vp.get("rhythm"):
+            lines.append(f"- 节奏：{vp['rhythm']}")
+        if vp.get("silence"):
+            lines.append(f"- 对方沉默时：{vp['silence']}")
+        if vp.get("never"):
+            lines.append("- 你这个角色绝不说：" + " / ".join(vp["never"]))
+        lines.append("- 同一句话如果别的场景的角色也说得出来，就说明你没在用自己的声音，重写。")
+    lines += [
+        "",
+        "每一轮按这个顺序做：",
+        *(PROMPTS.get("empathy_order") or []),
+        "",
+        "硬规则：",
         *PROMPTS["style_rules"],
-        "下面示例只学习节奏和分寸，不能逐字照抄：",
-        *[f"- {user} -> {assistant}" for user, assistant in character.get("mes_example", [])],
-        PROMPTS["safety_rule"],
-    ])
+        f"长度：{PROMPTS.get('length_rule', '')}",
+    ]
+    if PROMPTS.get("advice_policy"):
+        lines += ["", "建议规则（重要）", PROMPTS["advice_policy"]]
+        lines += [*(PROMPTS.get("advice_examples") or [])]
+    banned = PROMPTS.get("banned_openers") or []
+    if banned:
+        lines += ["", "这些开头本轮禁用，也不要连续两轮用同一种：" + " / ".join(banned)]
+    if user_text:
+        lines += ["", f"对方最后一句原话：{user_text}",
+                  "你回的第一句里必须出现对方这句话里的一个原词。"]
+    last = next((m["content"] for m in reversed(history or []) if m.get("role") == "assistant"), "")
+    if last:
+        lines += [f"你上一轮说的是：{last}", "这一轮不要和它用同一个开头、同一套句式。"]
+    patterns = PROMPTS.get("empathy_patterns") or []
+    if patterns:
+        lines += ["", "遇到这几种情况时怎么做（照做，不要照抄任何句子）：",
+                  *[f"- {p}" for p in patterns]]
+    mes = character.get("mes_example", [])
+    if mes:
+        lines += [f"{character.get('name', '这个角色')}的说话范例（严禁照抄原句，只学语气和长度）：",
+                  *[f"- {user} -> {assistant}" for user, assistant in mes]]
+    lines += ["", *arksec_prompt_lines(), *writing_prompt_lines(user_text), "", PROMPTS["safety_rule"]]
+    lines += ["", f"最后确认：上面出现的示例句一句都不能照抄，"
+                  f"用{character.get('name', '你')}自己的说法重说一遍。"]
+    return "\n".join(lines)
 
 
 def model_provider_settings() -> list[dict]:
@@ -349,7 +445,7 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
         request_body = {
             "model": settings["model"],
             "messages": [
-                {"role": "system", "content": build_system_prompt(scene, user_text)},
+                {"role": "system", "content": build_system_prompt(scene, user_text, history)},
                 *history[-8:],
                 {"role": "user", "content": user_text},
             ],
@@ -369,13 +465,14 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
                 data = json.loads(response.read().decode("utf-8"))
             reply = clean_reply(data["choices"][0]["message"]["content"])
             if not reply or risk_level_for(reply) >= 2:
+                # 模型回复为空或自己说出了高风险内容：不把它发给用户，改用兜底回复。
                 record_model_event({
                     "provider": settings["name"],
                     "outcome": "empty" if not reply else "safety_rejected",
                     "latency_ms": round((time.monotonic() - started) * 1000),
                 })
                 track("ai_fallback")
-                return safety_reply() if risk_level_for(reply) >= 2 else fallback_reply(scene, user_text)
+                return fallback_reply(scene, user_text)
             record_model_event({
                 "provider": settings["name"],
                 "outcome": "success",
@@ -392,36 +489,80 @@ def ask_model(scene: dict, history: list[dict], user_text: str) -> str:
             })
             continue
     track("ai_fallback")
-    if not settings_list:
-        record_model_event({"provider": "none", "outcome": "failed", "latency_ms": 0, "error_code": "not_configured"})
     return fallback_reply(scene, user_text)
 
 
+def _echo(user_text: str, limit: int = 12) -> str:
+    """从对方原话里截一段能直接接住的短句，用来做兜底回复。"""
+    text = (user_text or "").strip()
+    if not text:
+        return ""
+    first = re.split(r"[。！？!?，,；;\n\s]", text)[0].strip() or text
+    # 「我不知道该干嘛」→「不知道该干嘛」：去掉主语，更像真人复述而不是引用
+    if len(first) > 3 and first.startswith("我") and not first.startswith("我们"):
+        first = first[1:].strip() or first
+    # 纯符号输入（如「……」）：没东西可复述，返回空交给调用方处理
+    if not re.search(r"[\u4e00-\u9fff0-9]", first):
+        return ""
+    return first[:limit]
+
+
+# 对方什么都没说时用：不勉强复述，只表明在场
+PRESENCE_LINES = ["嗯 我在", "我在", "嗯 你说", "我听着"]
+
+
 def fallback_reply(scene: dict, user_text: str = "") -> str:
-    layer = emotion_layer_for(user_text)
-    candidates = WRITING_LIBRARY.get("layers", {}).get(layer, [])
-    prefix = candidates[0] if candidates else scene["fallback_prefix"]
-    return f"{prefix}{PROMPTS['fallback_suffix']}"
+    """没配 key / 请求失败时的兜底。必须复述对方原话，不能是常量。"""
+    echo = _echo(user_text)
+    if not echo:
+        return random.choice(PRESENCE_LINES)
+    pool = list(PROMPTS.get("fallback_templates") or [])
+    if scene.get("fallback_prefix"):
+        pool.append(scene["fallback_prefix"])
+    if not pool:
+        pool = ["{echo}"]
+    tpl = random.choice(pool)
+    return tpl.format(echo=echo).strip() if "{echo}" in tpl else f"{tpl} {echo}".strip()
 
 
 def clean_reply(text: str) -> str:
+    # 去掉模型偶尔包的代码块和「角色名：」前缀
     cleaned = re.sub(r"^\s*```(?:text|markdown)?\s*|\s*```\s*$", "", str(text or "").strip(), flags=re.IGNORECASE)
     cleaned = re.sub(
         r"^\s*(?:田山小姐|小林店员|林雨|周澄|阿纪|许姐|岚姐|陈姨|陪伴者|assistant|Assistant)\s*[:：]\s*",
         "",
         cleaned,
     )
+    # 界面上一个回复就是一个气泡：多行会拼成一长串，先收成一行
+    cleaned = " ".join(x.strip() for x in cleaned.splitlines() if x.strip())
     while re.match(r"^\s*[\(（][^\)）]{1,80}[\)）]\s*", cleaned):
         cleaned = re.sub(r"^\s*[\(（][^\)）]{1,80}[\)）]\s*", "", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if len(cleaned) > 120:
         split = max(cleaned.rfind(mark, 0, 120) for mark in "。！？!?；;")
         cleaned = cleaned[: split + 1 if split >= 40 else 120].rstrip()
-    return cleaned
+    # 真人语言里 80% 的话不用句号收尾，句号会立刻带出"文档感"
+    return re.sub(r"。+\s*$", "", cleaned).strip()
 
 
-def safety_reply() -> str:
-    return PROMPTS["safety_reply"]
+def safety_reply(level: int = 2, user_text: str = "") -> str:
+    key = "safety_reply_lv3" if level >= 3 else "safety_reply"
+    template = PROMPTS.get(key) or PROMPTS["safety_reply"]
+    hotline = os.getenv("SAFETY_HOTLINE") or PROMPTS.get("safety_hotline", "400-161-9995")
+    return template.format(echo=_echo(user_text, 16), hotline=hotline)
+
+
+def reply_for(scene: dict, history: list[dict], user_text: str,
+              risk_level: int | None = None) -> str:
+    """回复决策的唯一入口：高风险走转介，其余走陪伴。
+
+    放在 core 里而不是散在 main.py / server.py，是为了只能有一处事实源：
+    两个传输层都要用，测试也要用同一个函数，否则测的就不是真实行为。
+    """
+    level = risk_level_for(user_text) if risk_level is None else risk_level
+    if level >= 2:
+        return safety_reply(level, user_text)
+    return ask_model(scene, history, user_text)
 
 
 def safety_resources() -> str:
@@ -448,9 +589,55 @@ def config_status() -> dict:
     }
 
 
+ADMIN_TOKEN_HEADER = "X-Admin-Token"
+ADMIN_PATH_PREFIX = "/api/admin/"
+
+logger = logging.getLogger("houmen.admin")
+
+
+def admin_token_configured() -> bool:
+    return bool((os.getenv("ADMIN_TOKEN") or "").strip())
+
+
+def extract_admin_token(x_admin_token: str | None = None, authorization: str | None = None) -> str | None:
+    """后台口令优先取 X-Admin-Token 请求头，其次兼容 Authorization: Bearer <token>。"""
+    if x_admin_token:
+        return x_admin_token
+    if authorization:
+        scheme, _, value = authorization.partition(" ")
+        if scheme.lower() == "bearer" and value.strip():
+            return value.strip()
+    return None
+
+
+def admin_auth_error(token: str | None) -> tuple[int, str] | None:
+    """统一的后台鉴权检查。通过返回 None，否则返回 (HTTP 状态码, 错误信息)。
+
+    默认拒绝（fail closed）：没有配置 ADMIN_TOKEN 时，所有后台接口一律不可用。
+    """
+    expected = os.getenv("ADMIN_TOKEN") or ""
+    if not expected.strip():
+        return 503, "admin disabled: ADMIN_TOKEN is not configured"
+    if not token:
+        return 401, "admin token required"
+    if not hmac.compare_digest(token.encode("utf-8"), expected.encode("utf-8")):
+        return 401, "invalid admin token"
+    return None
+
+
 def admin_token_ok(token: str | None) -> bool:
-    expected = os.getenv("ADMIN_TOKEN")
-    return bool(expected) and token == expected
+    return admin_auth_error(token) is None
+
+
+def warn_if_admin_token_missing() -> bool:
+    """启动时调用：没配 ADMIN_TOKEN 就打一条明确的警告。返回是否已配置。"""
+    if admin_token_configured():
+        return True
+    logger.warning(
+        "ADMIN_TOKEN 未设置：所有 /api/admin/* 后台接口将返回 503，"
+        "请设置环境变量 ADMIN_TOKEN（Docker 部署写在 .env 里）为强口令后重启服务。"
+    )
+    return False
 
 
 def csv_text(rows: list[dict]) -> str:

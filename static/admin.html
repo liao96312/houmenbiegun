@@ -117,60 +117,61 @@
     </section>
     <section>
       <h2>安全事件</h2>
-      <button class="export" data-export="/api/admin/export/safety-events.csv">导出 CSV</button>
+      <a href="/api/admin/export/safety-events.csv" data-export="safety-events.csv">导出 CSV</a>
       <pre id="safety">[]</pre>
     </section>
     <section>
       <h2>会话摘要</h2>
-      <button class="export" data-export="/api/admin/export/conversations.csv">导出 CSV</button>
+      <a href="/api/admin/export/conversations.csv" data-export="conversations.csv">导出 CSV</a>
       <pre id="conversations">[]</pre>
     </section>
     <section>
       <h2>反馈</h2>
-      <button class="export" data-export="/api/admin/export/feedback.csv">导出 CSV</button>
+      <a href="/api/admin/export/feedback.csv" data-export="feedback.csv">导出 CSV</a>
       <pre id="feedback">[]</pre>
     </section>
   </main>
   <script>
-    function adminToken() {
-      let token = sessionStorage.getItem("admin_token") || "";
+    // 所有 /api/admin/* 请求都必须带 X-Admin-Token，口令存在 localStorage。
+    function adminToken(forcePrompt = false) {
+      let token = forcePrompt ? "" : (localStorage.getItem("admin_token") || "");
       if (!token) {
-        token = prompt("后台访问口令") || "";
-        if (token) sessionStorage.setItem("admin_token", token);
+        token = prompt("请输入后台口令（ADMIN_TOKEN）") || "";
+        if (token) localStorage.setItem("admin_token", token);
       }
       return token;
     }
 
-    function adminFetch(url, options = {}) {
+    async function adminFetch(url, options = {}, retried = false) {
       const headers = {...(options.headers || {}), "X-Admin-Token": adminToken()};
-      return fetch(url, {...options, headers});
+      const response = await fetch(url, {...options, headers});
+      if (response.status === 401) {
+        localStorage.removeItem("admin_token");
+        if (!retried && adminToken(true)) return adminFetch(url, options, true);
+      }
+      if (response.status === 503) {
+        alert("后台未启用：服务端没有配置 ADMIN_TOKEN");
+      }
+      return response;
     }
 
     async function adminJson(url) {
       const response = await adminFetch(url);
-      if (response.status === 401) {
-        sessionStorage.removeItem("admin_token");
-        throw new Error("admin token required");
-      }
+      if (!response.ok) throw new Error(`${url} -> ${response.status}`);
       return response.json();
     }
 
     async function load() {
-      let config, analytics, scenes, prompts, safety, conversations, feedback;
-      try {
-        [config, analytics, scenes, prompts, safety, conversations, feedback] = await Promise.all([
-          fetch("/api/config").then(r => r.json()),
-          fetch("/api/analytics").then(r => r.json()),
-          adminJson("/api/admin/scenes"),
-          adminJson("/api/admin/prompts"),
-          adminJson("/api/admin/safety-events"),
-          adminJson("/api/admin/conversations"),
-          adminJson("/api/admin/feedback")
-        ]);
-      } catch (error) {
-        document.querySelector("#config").textContent = "后台口令不正确或服务不可用";
-        return;
-      }
+      // 先单独请求一个后台接口，口令缺失/错误时只弹一次输入框，再并发拉其余数据。
+      const scenes = await adminJson("/api/admin/scenes");
+      const [config, analytics, prompts, safety, conversations, feedback] = await Promise.all([
+        fetch("/api/config").then(r => r.json()),
+        fetch("/api/analytics").then(r => r.json()),
+        adminJson("/api/admin/prompts"),
+        adminJson("/api/admin/safety-events"),
+        adminJson("/api/admin/conversations"),
+        adminJson("/api/admin/feedback")
+      ]);
       document.querySelector("#config").textContent = JSON.stringify(config, null, 2);
       document.querySelector("#analytics").textContent = JSON.stringify(analytics, null, 2);
       document.querySelector("#prompts").textContent = JSON.stringify(prompts, null, 2);
@@ -192,6 +193,19 @@
       }));
     }
     document.addEventListener("click", async event => {
+      const exportLink = event.target.closest("a[data-export]");
+      if (exportLink) {
+        event.preventDefault();
+        const response = await adminFetch(exportLink.getAttribute("href"));
+        if (!response.ok) return;
+        const url = URL.createObjectURL(await response.blob());
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = exportLink.dataset.export;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
       const button = event.target.closest("button[data-save]");
       if (!button) return;
       const kind = button.dataset.save;
@@ -201,24 +215,11 @@
         headers: {"Content-Type": "application/json"},
         body: textarea.value
       });
-      if (response.status === 401) sessionStorage.removeItem("admin_token");
       button.textContent = response.ok ? "已保存" : "保存失败";
       setTimeout(() => button.textContent = kind === "scenes" ? "保存场景 JSON" : "保存 Prompt JSON", 1600);
       if (response.ok) load();
     });
-    document.addEventListener("click", async event => {
-      const button = event.target.closest("button[data-export]");
-      if (!button) return;
-      const response = await adminFetch(button.dataset.export);
-      if (!response.ok) return;
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = button.dataset.export.split("/").pop();
-      link.click();
-      URL.revokeObjectURL(url);
-    });
-    load();
+    load().catch(error => console.error("后台数据加载失败", error));
   </script>
 </body>
 </html>

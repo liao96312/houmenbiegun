@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from app.core import ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, MODEL_EVENTS, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, MAX_INPUT_CHARS, RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_MAX_MODEL_CALLS, admin_token_ok, ask_model, branch_node, branch_start, branches_for_scene, config_status, csv_text, rate_limit_allowed, record_conversation_summary, record_feedback, record_safety_event, risk_level_for, safety_reply, safety_resources, save_prompts, save_scenes, scene_by_id, summarize, track, validate_input_text
+from app.core import ADMIN_PATH_PREFIX, ADMIN_TOKEN_HEADER, ANALYTICS, CONVERSATION_SUMMARIES, FEEDBACK, MODEL_EVENTS, PROMPTS, ROOT, SAFETY_EVENTS, SCENES, MAX_INPUT_CHARS, RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_MAX_MODEL_CALLS, admin_auth_error, branch_node, branch_start, branches_for_scene, config_status, csv_text, extract_admin_token, rate_limit_allowed, record_conversation_summary, record_feedback, record_safety_event, reply_for, risk_level_for, safety_resources, save_prompts, save_scenes, scene_by_id, summarize, track, validate_input_text, warn_if_admin_token_missing
 
 
 CONVERSATIONS: dict[str, dict] = {}
@@ -23,6 +23,8 @@ class PayloadTooLarge(Exception):
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith(ADMIN_PATH_PREFIX) and not self.admin_authorized():
+            return
         if path == "/health":
             return self.json({"ok": True, "service": "houmenwufenzhong"})
         if path == "/":
@@ -52,8 +54,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(config_status())
         if path == "/api/auth/login":
             return self.json({"user_id": str(uuid.uuid4()), "provider": "anonymous"})
-        if path.startswith("/api/admin/") and not admin_token_ok(self.headers.get("X-Admin-Token")):
-            return self.error(401, "admin token required")
         if path == "/api/admin/scenes":
             return self.json(SCENES)
         if path == "/api/admin/prompts":
@@ -83,6 +83,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if path.startswith(ADMIN_PATH_PREFIX) and not self.admin_authorized():
+            return
         try:
             body = self.body()
         except PayloadTooLarge:
@@ -131,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
                 })
             if risk_level < 2 and not rate_limit_allowed(subject, "model", RATE_LIMIT_MAX_MODEL_CALLS):
                 return self.error(429, "model rate limit reached")
-            reply = safety_reply() if risk_level >= 2 else ask_model(conversation["scene"], conversation["messages"], content)
+            reply = reply_for(conversation["scene"], conversation["messages"], content, risk_level)
             conversation["messages"].extend([
                 {"role": "user", "content": content},
                 {"role": "assistant", "content": reply},
@@ -216,8 +218,6 @@ class Handler(BaseHTTPRequestHandler):
             })
 
         if path == "/api/admin/scenes":
-            if not admin_token_ok(self.headers.get("X-Admin-Token")):
-                return self.error(401, "admin token required")
             try:
                 save_scenes(body)
             except (TypeError, ValueError):
@@ -225,8 +225,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"ok": True})
 
         if path == "/api/admin/prompts":
-            if not admin_token_ok(self.headers.get("X-Admin-Token")):
-                return self.error(401, "admin token required")
             try:
                 save_prompts(body)
             except (TypeError, ValueError):
@@ -253,6 +251,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"ok": True})
 
         return self.error(404, "not found")
+
+    def admin_authorized(self) -> bool:
+        """所有 /api/admin/* 请求共用的鉴权；失败时已写好错误响应并返回 False。"""
+        token = extract_admin_token(self.headers.get(ADMIN_TOKEN_HEADER), self.headers.get("Authorization"))
+        error = admin_auth_error(token)
+        if error:
+            status, detail = error
+            self.error(status, detail)
+            return False
+        return True
 
     def body(self):
         size = int(self.headers.get("Content-Length", "0"))
@@ -304,9 +312,31 @@ class Handler(BaseHTTPRequestHandler):
         return self.json({"detail": message}, status)
 
 
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8000
+
+
+def listen_address() -> tuple[str, int]:
+    """监听地址从环境变量 HOST / PORT 读取。
+
+    本机直接运行默认只监听 127.0.0.1；Docker 里需要 HOST=0.0.0.0，
+    否则容器外（包括端口映射）访问不到（Dockerfile / docker-compose.yml 已设置）。
+    """
+    host = (os.getenv("HOST") or "").strip() or DEFAULT_HOST
+    raw_port = (os.getenv("PORT") or "").strip()
+    try:
+        port = int(raw_port) if raw_port else DEFAULT_PORT
+    except ValueError:
+        raise SystemExit(f"PORT 必须是整数，当前为 {raw_port!r}")
+    if not 0 < port < 65536:
+        raise SystemExit(f"PORT 超出范围：{port}")
+    return host, port
+
+
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "8000"))
-    host = os.getenv("HOST", "127.0.0.1")
+    host, port = listen_address()
+    warn_if_admin_token_missing()
     server = ThreadingHTTPServer((host, port), Handler)
-    print(f"http://{host}:{port}")
+    shown = "127.0.0.1" if host in {"0.0.0.0", "::", ""} else host
+    print(f"listening on {host}:{port} -> http://{shown}:{port}", flush=True)
     server.serve_forever()

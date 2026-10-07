@@ -20,6 +20,9 @@ data/*.db
 # ---- 抓取原始产物（外部站点原始 JS，非源码，勿入库）----
 data/external/arksec_raw/
 
+# ---- 语料抓取原始数据（体积大，本地保留，可重新生成）----
+docs/语料审核/raw_*.json
+
 # ---- 系统 / 编辑器 ----
 .DS_Store
 Thumbs.db

@@ -55,7 +55,7 @@ Most emotional-support products either lean entirely on a large model (unstable 
 ```mermaid
 flowchart LR
   Browser["H5 chat page / admin"] --> API["FastAPI API"]
-  API --> Auth["Anonymous login + optional ADMIN_TOKEN"]
+  API --> Auth["Anonymous login + admin ADMIN_TOKEN"]
   API --> Free["Free chat"]
   Free --> LLM["OpenAI-compatible model"]
   API --> Branch["Branch companion engine"]
@@ -120,6 +120,8 @@ python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload
 ```
 
+Listen address: `python -m app.server` reads `HOST` / `PORT` from the environment and defaults to `127.0.0.1:8000` (local access only); set `HOST=0.0.0.0` to accept connections from other machines (preferably behind nginx). For uvicorn use CLI flags, e.g. `python -m uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+
 Open:
 
 - Chat page: http://127.0.0.1:8000
@@ -133,6 +135,8 @@ Docker:
 Copy-Item .env.example .env
 docker compose up --build
 ```
+
+Inside the container the server listens on `0.0.0.0:8000` (`HOST=0.0.0.0` is set in both `Dockerfile` and `docker-compose.yml`, and the compose value takes precedence over `.env`); reach it from the host at http://127.0.0.1:8000. Note that `ports: "8000:8000"` publishes the port on all host interfaces; use `"127.0.0.1:8000:8000"` if it should only be reachable through an nginx reverse proxy.
 
 Read-aloud is off by default and uses the browser's native speech synthesis. The server-side TTS setting is reserved and is not an MVP acceptance item yet.
 
@@ -155,15 +159,22 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
 DEEPSEEK_DEFAULT_MODEL=deepseek-chat
 DEEPSEEK_THINKING=disabled
 TTS_ENABLED=false # reserved server-side TTS switch
-ADMIN_TOKEN=set a strong token before public deployment
+ADMIN_TOKEN=required, admin token (32+ random ASCII chars recommended)
 ```
 
-Set `ADMIN_TOKEN` before any public deployment; the admin requires it when saving scenes/prompts.
+**`ADMIN_TOKEN` is required for any admin access.** Every `/api/admin/*` endpoint (scenes/prompts, safety events, feedback, conversation summaries, CSV exports, and saving scenes/prompts) requires the header `X-Admin-Token: <token>` (`Authorization: Bearer <token>` is also accepted):
+
+- `ADMIN_TOKEN` unset: admin endpoints return `503` and a warning is logged at startup;
+- missing or wrong token: `401`.
+
+The `/admin` page prompts for the token and keeps it in browser localStorage. Use ASCII only (HTTP headers cannot carry non-ASCII). Generate one with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
 ## Quality Checks
 
 ```powershell
 python tests_smoke.py
+python tests_admin_auth.py   # admin auth regression tests; needs pip install httpx
+python tests_server_bind.py   # HOST/PORT listen-address tests
 ```
 
 The smoke test covers scene/character integrity, risk grading, safety replies, the branch engine, and offline-corpus assertions. It **does not depend on a large model or the network**, and runs by default in CI.
